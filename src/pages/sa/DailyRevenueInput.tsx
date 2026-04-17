@@ -164,31 +164,56 @@ export default function DailyRevenueInput() {
       const deptList: { id: string; name: string }[] = (assignments && assignments.length > 0)
         ? assignments.map((a: any) => ({ id: a.department_id, name: a.departments?.name || 'Unknown' }))
         : [{ id: item.department_id, name: item.departments?.name || 'Unknown' }];
-      
+
       const targetDeptIds = deptList.map(d => d.id);
       const deptLabel = deptList.length > 1 ? "GABUNGAN DEPT" : deptList[0]?.name;
 
-      // Fetch semua data secara paralel
-      // Note: .maybeSingle() digunakan agar tidak crash jika waqaf kosong
-      const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes, dailyRevRes, deptRevTodayRes] = await Promise.all([
-        // Akumulasi omset bulan ini (approved)
-        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
+      // Fetch akumulasi bulanan, waqaf, target secara paralel
+      const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes, deptRevTodayRes] = await Promise.all([
+        // Akumulasi omset bulan ini (semua status agar inklusif)
+        supabase.from('daily_revenue')
+          .select('amount, department_id')
+          .in('department_id', targetDeptIds)
+          .eq('sa_id', profile?.id)
+          .in('status', ['approved', 'pending'])
+          .gte('date', startOfMonth)
+          .lte('date', date),
         // Akumulasi waqaf member bulan ini
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', startOfMonth).lte('date', date),
+        supabase.from('waqaf_member_entries')
+          .select('waqaf_amount, member_count')
+          .eq('sa_id', profile?.id)
+          .gte('date', startOfMonth)
+          .lte('date', date),
         // Target bulanan per departemen
-        supabase.from('monthly_targets').select('target_amount, last_year_amount, department_id').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
+        supabase.from('monthly_targets')
+          .select('target_amount, last_year_amount, department_id')
+          .in('department_id', targetDeptIds)
+          .eq('month', currentMonthVal)
+          .eq('year', currentYearVal),
         // Data waqaf hari ini — maybeSingle() agar tidak crash jika kosong
-        supabase.from('waqaf_member_entries').select('*').eq('sa_id', profile?.id).eq('date', date).maybeSingle(),
-        // Omset hari ini per departemen (approved)
-        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', date).eq('status', 'approved'),
-        // Semua omset hari ini (termasuk pending — agar tetap tampil meski belum approved)
-        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', date)
+        supabase.from('waqaf_member_entries')
+          .select('*')
+          .eq('sa_id', profile?.id)
+          .eq('date', date)
+          .maybeSingle(),
+        // Omset semua dept hari ini (semua status) untuk breakdown multi-dept
+        supabase.from('daily_revenue')
+          .select('amount, department_id')
+          .in('department_id', targetDeptIds)
+          .eq('sa_id', profile?.id)
+          .eq('date', date)
       ]);
 
-      // Hitung total omset hari ini: prioritas approved, fallback ke semua status
-      const dailySalesApproved = dailyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
-      const dailySalesAll = deptRevTodayRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
-      const dailySales = dailySalesApproved > 0 ? dailySalesApproved : dailySalesAll;
+      // ✅ Gunakan item.amount langsung sebagai omset hari ini
+      // (item = baris yang diklik di tabel — paling akurat, langsung dari DB)
+      const itemAmountToday = item.amount || 0;
+
+      // Jika multi-dept: hitung dari query, fallback ke item.amount untuk dept item
+      let dailySales = itemAmountToday;
+      if (deptList.length > 1) {
+        const totalFromQuery = deptRevTodayRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+        dailySales = totalFromQuery > 0 ? totalFromQuery : itemAmountToday;
+      }
 
       // Akumulasi bulan
       const accRev = monthlyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
@@ -206,11 +231,13 @@ export default function DailyRevenueInput() {
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
       const waqafToday = dailyWMRes.data;
 
-      // Buat baris omset per departemen
+      // Buat baris breakdown omset per departemen (hanya jika multi-dept)
       let deptOmsetLines = '';
       if (deptList.length > 1) {
         for (const dept of deptList) {
-          const deptSalesToday = deptRevTodayRes.data?.filter(r => r.department_id === dept.id).reduce((acc, curr) => acc + curr.amount, 0) || 0;
+          const deptSalesToday = deptRevTodayRes.data
+            ?.filter(r => r.department_id === dept.id)
+            .reduce((acc, curr) => acc + curr.amount, 0) || 0;
           deptOmsetLines += `\n- ${dept.name} : Rp ${deptSalesToday.toLocaleString('id-ID')}`;
         }
       }
