@@ -94,6 +94,13 @@ export default function DailyRevenueInput() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Validasi eksplisit: amount boleh 0, tapi harus angka valid
+    if (formData.amount == null || isNaN(formData.amount)) {
+      return alert("Nominal omset tidak valid.");
+    }
+    if (!formData.department_id) {
+      return alert("Pilih departemen terlebih dahulu.");
+    }
     setIsLoading(true);
     try {
       if (editingId) {
@@ -337,7 +344,6 @@ Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
               label="Nominal Omset"
               value={formData.amount}
               onChange={(val) => setFormData({ ...formData, amount: val })}
-              required
             />
 
             <InputField

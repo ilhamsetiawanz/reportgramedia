@@ -31,7 +31,7 @@ const CurrencyInput: FC<CurrencyInputProps> = ({
     onChange(numericValue);
   };
 
-  const displayValue = value === 0 ? "" : formatCurrency(value);
+  const displayValue = value === 0 ? "0" : formatCurrency(value);
 
   return (
     <InputField
@@ -39,7 +39,7 @@ const CurrencyInput: FC<CurrencyInputProps> = ({
       type="text" // Change to text for formatted display
       value={displayValue}
       onChange={handleChange}
-      placeholder={placeholder || "Rp 0"}
+      placeholder={placeholder || "0"}
       disabled={disabled}
       error={error}
       hint={hint}
