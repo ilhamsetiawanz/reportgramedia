@@ -209,40 +209,56 @@ export default function Home() {
 
   async function generateWAMessage(dept: any) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const dateToday = new Date().toISOString().split('T')[0];
       const monthStart = `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-01`;
       const currentMonthVal = new Date().getMonth() + 1;
       const currentYearVal = new Date().getFullYear();
       const isSA = profile?.role === 'store_associate';
 
-      let targetDeptIds = dept ? [dept.id] : [];
-      let deptLabel = dept ? `*${dept.name}*` : "";
+      // Identifikasi departemen yang dilapor
+      let targetDeptIds: string[] = [];
+      let deptLabel = "";
+      let assignedDepts: { id: string, name: string }[] = [];
 
       if (isSA) {
-        // Fetch ALL assignments for this SA to aggregate
+        // Ambil semua assignment departemen SA bulan ini
         const { data: assignments } = await supabase
           .from('monthly_assignments')
-          .select('department_id, departments(name)')
+          .select('department_id, departments(id, name)')
           .eq('sa_id', profile?.id)
           .eq('month', currentMonthVal)
           .eq('year', currentYearVal);
         
-        if (assignments && assignments.length > 0) {
-          targetDeptIds = assignments.map(a => a.department_id);
-          // Format vertical list for departments with significant indentation
-          if (assignments.length > 1) {
-             deptLabel = "\n" + assignments.map(a => `                                *${(a.departments as any)?.name}*`).join("\n");
-          } else {
-             deptLabel = `*${(assignments[0].departments as any)?.name}*`;
-          }
+        assignedDepts = (assignments || []).map((a: any) => ({
+          id: a.department_id,
+          name: a.departments?.name || "Unknown"
+        }));
+
+        if (assignedDepts.length > 0) {
+          targetDeptIds = assignedDepts.map(d => d.id);
+          deptLabel = assignedDepts.length > 1 ? "*GABUNGAN DEPT*" : `*${assignedDepts[0].name}*`;
+        } else if (dept) {
+          targetDeptIds = [dept.id];
+          deptLabel = `*${dept.name}*`;
+          assignedDepts = [{ id: dept.id, name: dept.name }];
         }
+      } else {
+        // Supervisor/SM melaporkan per departemen
+        targetDeptIds = dept ? [dept.id] : [];
+        deptLabel = dept ? `*${dept.name}*` : "";
+        if (dept) assignedDepts = [{ id: dept.id, name: dept.name }];
       }
       
       const [dailyRevRes, dailyWMRes, monthlyRevRes, monthlyWMRes, targetRes] = await Promise.all([
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', today).eq('status', 'approved'),
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).eq('date', today).single(),
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', monthStart).lte('date', today),
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', monthStart).lte('date', today),
+        // Omset hari ini (semua status agar input terbaru muncul)
+        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', dateToday),
+        // Waqaf hari ini (maybeSingle agar tidak crash)
+        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).eq('date', dateToday).maybeSingle(),
+        // Akumulasi omset bulan ini (approved + pending harian)
+        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).in('status', ['approved', 'pending']).gte('date', monthStart).lte('date', dateToday),
+        // Akumulasi waqaf bulan ini
+        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', monthStart).lte('date', dateToday),
+        // Target bulanan
         supabase.from('monthly_targets').select('target_amount, last_year_amount').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
       ]);
 
@@ -263,20 +279,29 @@ export default function Home() {
       const formattedDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       const currentMonthName = new Date().toLocaleString('id-ID', { month: 'long' });
 
+      // Breakdown per departemen jika ada lebih dari satu
+      let deptRevLines = "";
+      if (assignedDepts.length > 1) {
+        assignedDepts.forEach(d => {
+          const dSales = dailyRevRes.data?.filter(r => r.department_id === d.id).reduce((acc, curr) => acc + curr.amount, 0) || 0;
+          deptRevLines += `\n- ${d.name} : Rp ${dSales.toLocaleString('id-ID')}`;
+        });
+      }
+
       const message = `*Report Harian, ${formattedDate}*
 
 *Nama* : *${profile?.full_name}*
 *My Value* : ${dailyMember}
-*Waqaf* : ${dailyWaqaf > 0 ? 'Rp ' + dailyWaqaf.toLocaleString() : '-'}
+*Waqaf* : ${dailyWaqaf > 0 ? 'Rp ' + dailyWaqaf.toLocaleString('id-ID') : '-'}
 
 *Akumulasi 1 - ${new Date().getDate()} ${currentMonthName} ${new Date().getFullYear()}*
 *My Value* : ${accMember}
-*Wakaf* : Rp ${accWaqaf.toLocaleString()}
+*Wakaf* : Rp ${accWaqaf.toLocaleString('id-ID')}
 
 *Departement* : ${deptLabel}
 
-*Sales* : Rp ${dailySales.toLocaleString()}
-*Target* : Rp ${targetAmt.toLocaleString()}
+*Sales* : Rp ${dailySales.toLocaleString('id-ID')}${deptRevLines}
+*Target* : Rp ${targetAmt.toLocaleString('id-ID')}
 *Achiv* : ${achPerc.toFixed(1)}%
 *Growth* : ${growthPerc.toFixed(1)}%
 
@@ -286,7 +311,7 @@ export default function Home() {
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
     } catch (error) {
        console.error("Error generating Dashboard WA message:", error);
-       alert("Gagal membuat laporan WA. Pastikan data omset & waqaf hari ini sudah diinput and diverifikasi.");
+       alert("Gagal membuat laporan WA. Pastikan data omset & waqaf sudah diinput.");
     }
   }
 
