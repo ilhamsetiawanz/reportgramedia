@@ -6,7 +6,6 @@ import InputField from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
 import CurrencyInput from "../../components/form/input/CurrencyInput";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../../components/ui/table";
-import Badge from "../../components/ui/badge/Badge";
 import { TrashBinIcon } from "../../icons";
 
 interface SAProfile {
