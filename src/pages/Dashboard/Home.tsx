@@ -209,19 +209,21 @@ export default function Home() {
 
   async function generateWAMessage(dept: any) {
     try {
-      const dateToday = new Date().toISOString().split('T')[0];
-      const monthStart = `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-01`;
-      const currentMonthVal = new Date().getMonth() + 1;
-      const currentYearVal = new Date().getFullYear();
+      // Gunakan waktu lokal agar tanggal sinkron dengan input user
+      const now = new Date();
+      const dateToday = now.toLocaleDateString('en-CA'); // YYYY-MM-DD (local)
+      const currentYearVal = now.getFullYear();
+      const currentMonthVal = now.getMonth() + 1;
+      const startOfMonth = `${currentYearVal}-${currentMonthVal.toString().padStart(2, '0')}-01`;
+      
       const isSA = profile?.role === 'store_associate';
 
-      // Identifikasi departemen yang dilapor
+      // Identifikasi departemen
       let targetDeptIds: string[] = [];
       let deptLabel = "";
       let assignedDepts: { id: string, name: string }[] = [];
 
       if (isSA) {
-        // Ambil semua assignment departemen SA bulan ini
         const { data: assignments } = await supabase
           .from('monthly_assignments')
           .select('department_id, departments(id, name)')
@@ -243,23 +245,48 @@ export default function Home() {
           assignedDepts = [{ id: dept.id, name: dept.name }];
         }
       } else {
-        // Supervisor/SM melaporkan per departemen
         targetDeptIds = dept ? [dept.id] : [];
         deptLabel = dept ? `*${dept.name}*` : "";
         if (dept) assignedDepts = [{ id: dept.id, name: dept.name }];
       }
       
       const [dailyRevRes, dailyWMRes, monthlyRevRes, monthlyWMRes, targetRes] = await Promise.all([
-        // Omset hari ini (semua status agar input terbaru muncul)
-        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', dateToday),
-        // Waqaf hari ini (maybeSingle agar tidak crash)
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).eq('date', dateToday).maybeSingle(),
+        // Omset hari ini (semua status agar input terbaru langsung muncul)
+        supabase.from('daily_revenue')
+          .select('amount, department_id, sa_id')
+          .in('department_id', targetDeptIds)
+          .eq('date', dateToday)
+          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null),
+        
+        // Waqaf hari ini
+        supabase.from('waqaf_member_entries')
+          .select('waqaf_amount, member_count')
+          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
+          .eq('date', dateToday)
+          .maybeSingle(),
+        
         // Akumulasi omset bulan ini (approved + pending harian)
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).in('status', ['approved', 'pending']).gte('date', monthStart).lte('date', dateToday),
+        supabase.from('daily_revenue')
+          .select('amount')
+          .in('department_id', targetDeptIds)
+          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
+          .in('status', ['approved', 'pending'])
+          .gte('date', startOfMonth)
+          .lte('date', dateToday),
+        
         // Akumulasi waqaf bulan ini
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', monthStart).lte('date', dateToday),
+        supabase.from('waqaf_member_entries')
+          .select('waqaf_amount, member_count')
+          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
+          .gte('date', startOfMonth)
+          .lte('date', dateToday),
+        
         // Target bulanan
-        supabase.from('monthly_targets').select('target_amount, last_year_amount').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
+        supabase.from('monthly_targets')
+          .select('target_amount, last_year_amount')
+          .in('department_id', targetDeptIds)
+          .eq('month', currentMonthVal)
+          .eq('year', currentYearVal),
       ]);
 
       const dailySales = dailyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
@@ -276,14 +303,16 @@ export default function Home() {
       const growthAmt = accRev - lyAmt;
       const growthPerc = lyAmt > 0 ? (growthAmt / lyAmt) * 100 : 0;
 
-      const formattedDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-      const currentMonthName = new Date().toLocaleString('id-ID', { month: 'long' });
+      const formattedDate = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      const currentMonthName = now.toLocaleString('id-ID', { month: 'long' });
 
-      // Breakdown per departemen jika ada lebih dari satu
+      // Breakdown per departemen (tampilkan rincian)
       let deptRevLines = "";
-      if (assignedDepts.length > 1) {
+      if (assignedDepts.length > 0) {
         assignedDepts.forEach(d => {
-          const dSales = dailyRevRes.data?.filter(r => r.department_id === d.id).reduce((acc, curr) => acc + curr.amount, 0) || 0;
+          const dSales = dailyRevRes.data
+            ?.filter(r => r.department_id === d.id)
+            .reduce((acc, curr) => acc + curr.amount, 0) || 0;
           deptRevLines += `\n- ${d.name} : Rp ${dSales.toLocaleString('id-ID')}`;
         });
       }
@@ -294,7 +323,7 @@ export default function Home() {
 *My Value* : ${dailyMember}
 *Waqaf* : ${dailyWaqaf > 0 ? 'Rp ' + dailyWaqaf.toLocaleString('id-ID') : '-'}
 
-*Akumulasi 1 - ${new Date().getDate()} ${currentMonthName} ${new Date().getFullYear()}*
+*Akumulasi 1 - ${now.getDate()} ${currentMonthName} ${currentYearVal}*
 *My Value* : ${accMember}
 *Wakaf* : Rp ${accWaqaf.toLocaleString('id-ID')}
 
@@ -306,6 +335,7 @@ export default function Home() {
 *Growth* : ${growthPerc.toFixed(1)}%
 
 *Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih* 🙏`;
+
 
       const encodedMessage = encodeURIComponent(message);
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
