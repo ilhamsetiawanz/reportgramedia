@@ -152,42 +152,50 @@ export default function DailyRevenueInput() {
       const currentMonthVal = new Date(date).getMonth() + 1;
       const currentYearVal = new Date(date).getFullYear();
 
-      // For SA this page is always aggregate
-      let targetDeptIds = [item.department_id];
-      let deptLabel = item.departments?.name;
-
+      // Ambil semua assignment departemen SA bulan ini
       const { data: assignments } = await supabase
         .from('monthly_assignments')
-        .select('department_id')
+        .select('department_id, departments(id, name)')
         .eq('sa_id', profile?.id)
         .eq('month', currentMonthVal)
         .eq('year', currentYearVal);
+
+      // Fallback ke dept dari item jika tidak ada assignment
+      const deptList: { id: string; name: string }[] = (assignments && assignments.length > 0)
+        ? assignments.map((a: any) => ({ id: a.department_id, name: a.departments?.name || 'Unknown' }))
+        : [{ id: item.department_id, name: item.departments?.name || 'Unknown' }];
       
-      if (assignments && assignments.length > 0) {
-        targetDeptIds = assignments.map(a => a.department_id);
-        deptLabel = assignments.length > 1 ? "GABUNGAN DEPT" : item.departments?.name;
-      }
-      
-      const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes] = await Promise.all([
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
+      const targetDeptIds = deptList.map(d => d.id);
+      const deptLabel = deptList.length > 1 ? "GABUNGAN DEPT" : deptList[0]?.name;
+
+      // Fetch semua data secara paralel
+      // Note: .maybeSingle() digunakan agar tidak crash jika waqaf kosong
+      const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes, dailyRevRes, deptRevTodayRes] = await Promise.all([
+        // Akumulasi omset bulan ini (approved)
+        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
+        // Akumulasi waqaf member bulan ini
         supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', startOfMonth).lte('date', date),
-        supabase.from('monthly_targets').select('target_amount, last_year_amount').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
-        supabase.from('waqaf_member_entries').select('*').eq('sa_id', profile?.id).eq('date', date).single()
+        // Target bulanan per departemen
+        supabase.from('monthly_targets').select('target_amount, last_year_amount, department_id').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
+        // Data waqaf hari ini — maybeSingle() agar tidak crash jika kosong
+        supabase.from('waqaf_member_entries').select('*').eq('sa_id', profile?.id).eq('date', date).maybeSingle(),
+        // Omset hari ini per departemen (approved)
+        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', date).eq('status', 'approved'),
+        // Semua omset hari ini (termasuk pending — agar tetap tampil meski belum approved)
+        supabase.from('daily_revenue').select('amount, department_id').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('date', date)
       ]);
 
-      const dailyRevToday = await supabase
-        .from('daily_revenue')
-        .select('amount')
-        .in('department_id', targetDeptIds)
-        .eq('sa_id', profile?.id)
-        .eq('date', date)
-        .eq('status', 'approved');
+      // Hitung total omset hari ini: prioritas approved, fallback ke semua status
+      const dailySalesApproved = dailyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+      const dailySalesAll = deptRevTodayRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+      const dailySales = dailySalesApproved > 0 ? dailySalesApproved : dailySalesAll;
 
-      const dailySales = dailyRevToday.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+      // Akumulasi bulan
       const accRev = monthlyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const accMember = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
       const accWaqaf = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
 
+      // Target
       const targetAmt = targetRes.data?.reduce((acc, curr) => acc + curr.target_amount, 0) || 0;
       const lyAmt = targetRes.data?.reduce((acc, curr) => acc + curr.last_year_amount, 0) || 0;
       const achPerc = targetAmt > 0 ? (accRev / targetAmt) * 100 : 0;
@@ -196,19 +204,29 @@ export default function DailyRevenueInput() {
 
       const formattedDate = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
+      const waqafToday = dailyWMRes.data;
+
+      // Buat baris omset per departemen
+      let deptOmsetLines = '';
+      if (deptList.length > 1) {
+        for (const dept of deptList) {
+          const deptSalesToday = deptRevTodayRes.data?.filter(r => r.department_id === dept.id).reduce((acc, curr) => acc + curr.amount, 0) || 0;
+          deptOmsetLines += `\n- ${dept.name} : Rp ${deptSalesToday.toLocaleString('id-ID')}`;
+        }
+      }
 
       const message = `*Report Harian, ${formattedDate}*
 Nama : ${profile?.full_name}
-My Value : ${dailyWMRes.data?.member_count || 0}
-Waqaf : ${dailyWMRes.data?.waqaf_amount > 0 ? 'Rp ' + dailyWMRes.data.waqaf_amount.toLocaleString() : '-'}
+My Value : ${waqafToday?.member_count || 0}
+Waqaf : ${(waqafToday?.waqaf_amount || 0) > 0 ? 'Rp ' + (waqafToday?.waqaf_amount || 0).toLocaleString('id-ID') : '-'}
 
 *Akumulasi 1 - ${new Date(date).getDate()} ${currentMonthName} ${new Date(date).getFullYear()}*
 My Value : ${accMember}
-Wakaf : Rp ${accWaqaf.toLocaleString()}
+Wakaf : Rp ${accWaqaf.toLocaleString('id-ID')}
 
 Departement : *${deptLabel}*
-Sales : Rp ${dailySales.toLocaleString()}
-Target : Rp ${targetAmt.toLocaleString()}
+Sales : Rp ${dailySales.toLocaleString('id-ID')}${deptOmsetLines}
+Target : Rp ${targetAmt.toLocaleString('id-ID')}
 Achiv : ${achPerc.toFixed(1)}%
 Growth : ${growthPerc.toFixed(1)}%
 
