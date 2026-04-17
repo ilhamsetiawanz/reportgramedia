@@ -209,7 +209,6 @@ export default function Home() {
 
   async function generateWAMessage(dept: any) {
     try {
-      // Gunakan waktu lokal agar tanggal sinkron dengan input user
       const now = new Date();
       const dateToday = now.toLocaleDateString('en-CA'); // YYYY-MM-DD (local)
       const currentYearVal = now.getFullYear();
@@ -250,34 +249,28 @@ export default function Home() {
         if (dept) assignedDepts = [{ id: dept.id, name: dept.name }];
       }
       
-      const [dailyRevRes, dailyWMRes, monthlyRevRes, monthlyWMRes, targetRes] = await Promise.all([
-        // Omset hari ini (semua status agar input terbaru langsung muncul)
+      // ===== QUERY: Omset berdasarkan DEPARTMENT (tanpa filter sa_id) =====
+      // Agar data tetap muncul meskipun departemen di-take over SA baru
+      const [accRevRes, dailyWMRes, monthlyWMRes, targetRes] = await Promise.all([
+        // Akumulasi omset bulan ini per departemen (SEMUA SA, tanpa filter sa_id)
         supabase.from('daily_revenue')
-          .select('amount, department_id, sa_id')
+          .select('amount, department_id')
           .in('department_id', targetDeptIds)
-          .eq('date', dateToday)
-          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null),
-        
-        // Waqaf hari ini
-        supabase.from('waqaf_member_entries')
-          .select('waqaf_amount, member_count')
-          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
-          .eq('date', dateToday)
-          .maybeSingle(),
-        
-        // Akumulasi omset bulan ini (approved + pending harian)
-        supabase.from('daily_revenue')
-          .select('amount')
-          .in('department_id', targetDeptIds)
-          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
           .in('status', ['approved', 'pending'])
           .gte('date', startOfMonth)
           .lte('date', dateToday),
         
-        // Akumulasi waqaf bulan ini
+        // Waqaf hari ini (milik SA ini)
         supabase.from('waqaf_member_entries')
           .select('waqaf_amount, member_count')
-          .filter(isSA ? 'sa_id' : 'id', isSA ? 'eq' : 'not.is', isSA ? profile?.id : null)
+          .eq('sa_id', profile?.id)
+          .eq('date', dateToday)
+          .maybeSingle(),
+        
+        // Akumulasi waqaf bulan ini (milik SA ini)
+        supabase.from('waqaf_member_entries')
+          .select('waqaf_amount, member_count')
+          .eq('sa_id', profile?.id)
           .gte('date', startOfMonth)
           .lte('date', dateToday),
         
@@ -289,11 +282,11 @@ export default function Home() {
           .eq('year', currentYearVal),
       ]);
 
-      const dailySales = dailyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const dailyMember = dailyWMRes.data?.member_count || 0;
       const dailyWaqaf = dailyWMRes.data?.waqaf_amount || 0;
 
-      const accRev = monthlyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+      // Sales = AKUMULASI bulan (tgl 1 s/d hari ini), bukan hanya hari ini
+      const accRev = accRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const accMember = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
       const accWaqaf = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
 
@@ -306,14 +299,14 @@ export default function Home() {
       const formattedDate = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       const currentMonthName = now.toLocaleString('id-ID', { month: 'long' });
 
-      // Breakdown per departemen (tampilkan rincian)
+      // Breakdown akumulasi omset per departemen
       let deptRevLines = "";
       if (assignedDepts.length > 0) {
         assignedDepts.forEach(d => {
-          const dSales = dailyRevRes.data
+          const dAccSales = accRevRes.data
             ?.filter(r => r.department_id === d.id)
             .reduce((acc, curr) => acc + curr.amount, 0) || 0;
-          deptRevLines += `\n- ${d.name} : Rp ${dSales.toLocaleString('id-ID')}`;
+          deptRevLines += `\n- ${d.name} : Rp ${dAccSales.toLocaleString('id-ID')}`;
         });
       }
 
@@ -329,13 +322,12 @@ export default function Home() {
 
 *Departement* : ${deptLabel}
 
-*Sales* : Rp ${dailySales.toLocaleString('id-ID')}${deptRevLines}
+*Sales* : Rp ${accRev.toLocaleString('id-ID')}${deptRevLines}
 *Target* : Rp ${targetAmt.toLocaleString('id-ID')}
 *Achiv* : ${achPerc.toFixed(1)}%
 *Growth* : ${growthPerc.toFixed(1)}%
 
 *Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih* 🙏`;
-
 
       const encodedMessage = encodeURIComponent(message);
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');

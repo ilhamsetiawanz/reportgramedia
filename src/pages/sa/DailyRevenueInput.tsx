@@ -175,17 +175,17 @@ export default function DailyRevenueInput() {
       const targetDeptIds = deptList.map(d => d.id);
       const deptLabel = deptList.length > 1 ? "GABUNGAN DEPT" : deptList[0]?.name;
 
-      // Fetch akumulasi bulanan, waqaf, target secara paralel
-      const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes, deptRevTodayRes] = await Promise.all([
-        // Akumulasi omset bulan ini (semua status agar inklusif)
+      // ===== QUERY: Omset berdasarkan DEPARTMENT (tanpa filter sa_id) =====
+      // Agar data tetap muncul meskipun departemen di-take over SA baru
+      const [accRevRes, monthlyWMRes, targetRes, dailyWMRes] = await Promise.all([
+        // Akumulasi omset bulan ini per department (SEMUA SA)
         supabase.from('daily_revenue')
           .select('amount, department_id')
           .in('department_id', targetDeptIds)
-          .eq('sa_id', profile?.id)
           .in('status', ['approved', 'pending'])
           .gte('date', startOfMonth)
           .lte('date', date),
-        // Akumulasi waqaf member bulan ini
+        // Akumulasi waqaf member bulan ini (milik SA ini)
         supabase.from('waqaf_member_entries')
           .select('waqaf_amount, member_count')
           .eq('sa_id', profile?.id)
@@ -197,33 +197,16 @@ export default function DailyRevenueInput() {
           .in('department_id', targetDeptIds)
           .eq('month', currentMonthVal)
           .eq('year', currentYearVal),
-        // Data waqaf hari ini — maybeSingle() agar tidak crash jika kosong
+        // Data waqaf hari ini (milik SA ini)
         supabase.from('waqaf_member_entries')
           .select('*')
           .eq('sa_id', profile?.id)
           .eq('date', date)
           .maybeSingle(),
-        // Omset semua dept hari ini (semua status) untuk breakdown multi-dept
-        supabase.from('daily_revenue')
-          .select('amount, department_id')
-          .in('department_id', targetDeptIds)
-          .eq('sa_id', profile?.id)
-          .eq('date', date)
       ]);
 
-      // ✅ Gunakan item.amount langsung sebagai omset hari ini
-      // (item = baris yang diklik di tabel — paling akurat, langsung dari DB)
-      const itemAmountToday = item.amount || 0;
-
-      // Jika multi-dept: hitung dari query, fallback ke item.amount untuk dept item
-      let dailySales = itemAmountToday;
-      if (deptList.length > 1) {
-        const totalFromQuery = deptRevTodayRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
-        dailySales = totalFromQuery > 0 ? totalFromQuery : itemAmountToday;
-      }
-
-      // Akumulasi bulan
-      const accRev = monthlyRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
+      // Sales = AKUMULASI bulan (tgl 1 s/d tanggal item), bukan hanya hari ini
+      const accRev = accRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const accMember = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
       const accWaqaf = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
 
@@ -238,14 +221,14 @@ export default function DailyRevenueInput() {
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
       const waqafToday = dailyWMRes.data;
 
-      // Buat baris breakdown omset per departemen (hanya jika multi-dept)
+      // Breakdown akumulasi omset per departemen
       let deptOmsetLines = '';
-      if (deptList.length > 1) {
+      if (deptList.length > 0) {
         for (const dept of deptList) {
-          const deptSalesToday = deptRevTodayRes.data
+          const deptAccSales = accRevRes.data
             ?.filter(r => r.department_id === dept.id)
             .reduce((acc, curr) => acc + curr.amount, 0) || 0;
-          deptOmsetLines += `\n- ${dept.name} : Rp ${deptSalesToday.toLocaleString('id-ID')}`;
+          deptOmsetLines += `\n- ${dept.name} : Rp ${deptAccSales.toLocaleString('id-ID')}`;
         }
       }
 
@@ -259,7 +242,7 @@ My Value : ${accMember}
 Wakaf : Rp ${accWaqaf.toLocaleString('id-ID')}
 
 Departement : *${deptLabel}*
-Sales : Rp ${dailySales.toLocaleString('id-ID')}${deptOmsetLines}
+Sales : Rp ${accRev.toLocaleString('id-ID')}${deptOmsetLines}
 Target : Rp ${targetAmt.toLocaleString('id-ID')}
 Achiv : ${achPerc.toFixed(1)}%
 Growth : ${growthPerc.toFixed(1)}%
