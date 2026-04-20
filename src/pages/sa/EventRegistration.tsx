@@ -32,7 +32,6 @@ export default function EventRegistration() {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [target, setTarget] = useState<number>(0);
   const [history, setHistory] = useState<Participant[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -69,7 +68,6 @@ export default function EventRegistration() {
 
   async function fetchProgressAndHistory() {
     if (!profile || !selectedEvent) return;
-    setIsLoading(true);
     try {
       // 1. Fetch Target
       const { data: targetData } = await supabase
@@ -92,8 +90,6 @@ export default function EventRegistration() {
       setHistory(historyData || []);
     } catch (error) {
       console.error("Error fetching progress:", error);
-    } finally {
-      setIsLoading(false);
     }
   }
 
