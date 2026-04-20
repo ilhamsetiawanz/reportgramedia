@@ -27,6 +27,10 @@ import ActivityReport from "./pages/reports/ActivityReport";
 import DailyRecap from "./pages/reports/DailyRecap";
 import AssignSA from "./pages/spv/AssignSA";
 import SARevenueInput from "./pages/spv/SARevenueInput";
+import ManageEvents from "./pages/sm/ManageEvents";
+import EventTargets from "./pages/sm/EventTargets";
+import EventRegistration from "./pages/sa/EventRegistration";
+import EventParticipantReport from "./pages/reports/EventParticipantReport";
 
 
 /**
@@ -109,6 +113,8 @@ export default function App() {
           <Route path="/sm/users" element={<ManageUsers />} />
           <Route path="/sm/departments" element={<ManageDepartments />} />
           <Route path="/sm/targets" element={<ManageDepartments />} />
+          <Route path="/sm/events" element={<ManageEvents />} />
+          <Route path="/sm/event-targets" element={<EventTargets />} />
 
           {/* SPV Routes */}
           <Route path="/spv/sa" element={<ManageSA />} />
@@ -117,11 +123,13 @@ export default function App() {
           <Route path="/spv/input-revenue" element={<SARevenueInput />} />
           <Route path="/spv/targets" element={<MonthlyTargetsSPV />} />
           <Route path="/spv/waqaf-targets" element={<WaqafMemberTargets />} />
+          <Route path="/spv/event-targets" element={<EventTargets />} />
 
           {/* SA Routes */}
           <Route path="/sa/revenue" element={<DailyRevenueInput />} />
           <Route path="/sa/waqaf" element={<WaqafMemberInput />} />
           <Route path="/sa/activities" element={<ActivityReportInput />} />
+          <Route path="/sa/event-registration" element={<EventRegistration />} />
 
           <Route path="/reports/daily" element={<DailyReport />} />
           <Route path="/reports/daily-recap" element={<DailyRecap />} />
@@ -129,6 +137,7 @@ export default function App() {
           <Route path="/reports/waqaf-member" element={<WaqafMemberReport />} />
           <Route path="/reports/dept" element={<MonthlyReport />} />
           <Route path="/reports/activities" element={<ActivityReport />} />
+          <Route path="/reports/event-participants" element={<EventParticipantReport />} />
 
           <Route path="/blank" element={<Blank />} />
         </Route>

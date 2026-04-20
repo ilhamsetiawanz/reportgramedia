@@ -60,8 +60,11 @@ const AppSidebar: React.FC = () => {
             { name: "Rekap Omset Harian", path: "/reports/daily-recap" },
             { name: "Omset Bulanan", path: "/reports/monthly" },
             { name: "Waqaf & Member", path: "/reports/waqaf-member" },
+            { name: "Peserta Event", path: "/reports/event-participants" },
           ],
         },
+        { name: "Kelola Event", icon: <ListIcon />, path: "/sm/events" },
+        { name: "Target Event", icon: <PlusIcon />, path: "/sm/event-targets" },
       ];
     }
 
@@ -82,8 +85,10 @@ const AppSidebar: React.FC = () => {
             { name: "Rekap Omset Harian", path: "/reports/daily-recap" },
             { name: "Waqaf & Member", path: "/reports/waqaf-member" },
             { name: "Kegiatan SA", path: "/reports/activities" },
+            { name: "Peserta Event", path: "/reports/event-participants" },
           ],
         },
+        { name: "Target Event", icon: <PlusIcon />, path: "/spv/event-targets" },
       ];
     }
 
@@ -92,6 +97,7 @@ const AppSidebar: React.FC = () => {
         { name: "Dashboard SA", icon: <GridIcon />, path: "/" },
         { name: "Input Omset", icon: <PlusIcon />, path: "/sa/revenue" },
         { name: "Waqaf & Member", icon: <DollarLineIcon />, path: "/sa/waqaf" },
+        { name: "Pendaftaran Event", icon: <ListIcon />, path: "/sa/event-registration" },
         { name: "Rekap Omset Harian", icon: <TableIcon />, path: "/reports/daily-recap" },
         { name: "Laporan Bulanan", icon: <PieChartIcon />, path: "/reports/monthly" },
       ];
