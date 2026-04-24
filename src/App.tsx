@@ -31,12 +31,13 @@ import ManageEvents from "./pages/sm/ManageEvents";
 import EventTargets from "./pages/sm/EventTargets";
 import EventRegistration from "./pages/sa/EventRegistration";
 import EventParticipantReport from "./pages/reports/EventParticipantReport";
+import CounterEventRegistration from "./pages/counter/CounterEventRegistration";
 
 
 /**
  * Robust Protected Route
  */
-const ProtectedRoute = ({ children, requireApproval = true }: { children: React.ReactNode, requireApproval?: boolean }) => {
+const ProtectedRoute = ({ children, requireApproval = true, allowedRoles }: { children: React.ReactNode, requireApproval?: boolean, allowedRoles?: string[] }) => {
   const { session, profile, isLoading } = useAuthStore();
   const location = useLocation();
 
@@ -60,6 +61,10 @@ const ProtectedRoute = ({ children, requireApproval = true }: { children: React.
 
     if (!isApproved || !hasRole) {
       return <Navigate to="/pending" replace />;
+    }
+
+    if (allowedRoles && profile?.role && !allowedRoles.includes(profile.role)) {
+      return <Navigate to="/" replace />;
     }
   }
 
@@ -110,34 +115,38 @@ export default function App() {
           {/* Profile Route Removed */}
 
           {/* SM Routes */}
-          <Route path="/sm/users" element={<ManageUsers />} />
-          <Route path="/sm/departments" element={<ManageDepartments />} />
-          <Route path="/sm/targets" element={<ManageDepartments />} />
-          <Route path="/sm/events" element={<ManageEvents />} />
-          <Route path="/sm/event-targets" element={<EventTargets />} />
+          <Route path="/sm/users" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageUsers /></ProtectedRoute>} />
+          <Route path="/sm/departments" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageDepartments /></ProtectedRoute>} />
+          <Route path="/sm/targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageDepartments /></ProtectedRoute>} />
+          <Route path="/sm/events" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageEvents /></ProtectedRoute>} />
+          <Route path="/sm/event-targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><EventTargets /></ProtectedRoute>} />
 
           {/* SPV Routes */}
-          <Route path="/spv/sa" element={<ManageSA />} />
-          <Route path="/spv/assign" element={<AssignSA />} />
-          <Route path="/spv/verify" element={<VerifyRevenue />} />
-          <Route path="/spv/input-revenue" element={<SARevenueInput />} />
-          <Route path="/spv/targets" element={<MonthlyTargetsSPV />} />
-          <Route path="/spv/waqaf-targets" element={<WaqafMemberTargets />} />
-          <Route path="/spv/event-targets" element={<EventTargets />} />
+          <Route path="/spv/sa" element={<ProtectedRoute allowedRoles={["supervisor"]}><ManageSA /></ProtectedRoute>} />
+          <Route path="/spv/assign" element={<ProtectedRoute allowedRoles={["supervisor"]}><AssignSA /></ProtectedRoute>} />
+          <Route path="/spv/verify" element={<ProtectedRoute allowedRoles={["supervisor"]}><VerifyRevenue /></ProtectedRoute>} />
+          <Route path="/spv/input-revenue" element={<ProtectedRoute allowedRoles={["supervisor"]}><SARevenueInput /></ProtectedRoute>} />
+          <Route path="/spv/targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><MonthlyTargetsSPV /></ProtectedRoute>} />
+          <Route path="/spv/waqaf-targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><WaqafMemberTargets /></ProtectedRoute>} />
+          <Route path="/spv/event-targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><EventTargets /></ProtectedRoute>} />
 
           {/* SA Routes */}
-          <Route path="/sa/revenue" element={<DailyRevenueInput />} />
-          <Route path="/sa/waqaf" element={<WaqafMemberInput />} />
-          <Route path="/sa/activities" element={<ActivityReportInput />} />
-          <Route path="/sa/event-registration" element={<EventRegistration />} />
+          <Route path="/sa/revenue" element={<ProtectedRoute allowedRoles={["store_associate"]}><DailyRevenueInput /></ProtectedRoute>} />
+          <Route path="/sa/waqaf" element={<ProtectedRoute allowedRoles={["store_associate"]}><WaqafMemberInput /></ProtectedRoute>} />
+          <Route path="/sa/activities" element={<ProtectedRoute allowedRoles={["store_associate"]}><ActivityReportInput /></ProtectedRoute>} />
+          <Route path="/sa/event-registration" element={<ProtectedRoute allowedRoles={["store_associate"]}><EventRegistration /></ProtectedRoute>} />
 
-          <Route path="/reports/daily" element={<DailyReport />} />
-          <Route path="/reports/daily-recap" element={<DailyRecap />} />
-          <Route path="/reports/monthly" element={<MonthlyReport />} />
-          <Route path="/reports/waqaf-member" element={<WaqafMemberReport />} />
-          <Route path="/reports/dept" element={<MonthlyReport />} />
-          <Route path="/reports/activities" element={<ActivityReport />} />
-          <Route path="/reports/event-participants" element={<EventParticipantReport />} />
+          {/* Counter Routes */}
+          <Route path="/counter/event-registration" element={<ProtectedRoute allowedRoles={["counter"]}><CounterEventRegistration /></ProtectedRoute>} />
+
+          {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
+          <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager"]}><DailyReport /></ProtectedRoute>} />
+          <Route path="/reports/daily-recap" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "store_associate"]}><DailyRecap /></ProtectedRoute>} />
+          <Route path="/reports/monthly" element={<ProtectedRoute allowedRoles={["store_manager", "store_associate"]}><MonthlyReport /></ProtectedRoute>} />
+          <Route path="/reports/waqaf-member" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><WaqafMemberReport /></ProtectedRoute>} />
+          <Route path="/reports/dept" element={<ProtectedRoute allowedRoles={["supervisor"]}><MonthlyReport /></ProtectedRoute>} />
+          <Route path="/reports/activities" element={<ProtectedRoute allowedRoles={["supervisor"]}><ActivityReport /></ProtectedRoute>} />
+          <Route path="/reports/event-participants" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><EventParticipantReport /></ProtectedRoute>} />
 
           <Route path="/blank" element={<Blank />} />
         </Route>

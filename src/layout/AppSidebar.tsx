@@ -26,9 +26,21 @@ type NavItem = {
 };
 
 const AppSidebar: React.FC = () => {
-  const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const {
+    isExpanded,
+    isMobileOpen,
+    isHovered,
+    setIsHovered,
+    toggleMobileSidebar,
+  } = useSidebar();
   const location = useLocation();
   const { profile, signOut } = useAuthStore();
+
+  const handleLinkClick = () => {
+    if (isMobileOpen) {
+      toggleMobileSidebar();
+    }
+  };
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: string;
@@ -49,9 +61,11 @@ const AppSidebar: React.FC = () => {
     if (role === "store_manager") {
       return [
         { name: "Dashboard SM", icon: <GridIcon />, path: "/" },
-        { name: "Kelola User", icon: <GroupIcon />, path: "/sm/users" },
-        { name: "Kelola Dept", icon: <FolderIcon />, path: "/sm/departments" },
+        { name: "Kelola Event", icon: <ListIcon />, path: "/sm/events" },
+        { name: "Target Event", icon: <PlusIcon />, path: "/sm/event-targets" },
         { name: "Target Omset", icon: <DollarLineIcon />, path: "/sm/targets" },
+        { name: "Kelola Dept", icon: <FolderIcon />, path: "/sm/departments" },
+        { name: "Kelola User", icon: <GroupIcon />, path: "/sm/users" },
         {
           name: "Laporan",
           icon: <PieChartIcon />,
@@ -63,20 +77,19 @@ const AppSidebar: React.FC = () => {
             { name: "Peserta Event", path: "/reports/event-participants" },
           ],
         },
-        { name: "Kelola Event", icon: <ListIcon />, path: "/sm/events" },
-        { name: "Target Event", icon: <PlusIcon />, path: "/sm/event-targets" },
       ];
     }
 
     if (role === "supervisor") {
       return [
         { name: "Dashboard SPV", icon: <GridIcon />, path: "/" },
-        { name: "Kelola Tim SA", icon: <GroupIcon />, path: "/spv/sa" },
-        { name: "Penugasan Dept", icon: <ListIcon />, path: "/spv/assign" },
-        { name: "Verifikasi Omset", icon: <CheckCircleIcon />, path: "/spv/verify" },
         { name: "Input Omset SA", icon: <PlusIcon />, path: "/spv/input-revenue" },
+        { name: "Verifikasi Omset", icon: <CheckCircleIcon />, path: "/spv/verify" },
         { name: "Target Dept", icon: <DollarLineIcon />, path: "/spv/targets" },
         { name: "Target WAQAF/Member", icon: <PlusIcon />, path: "/spv/waqaf-targets" },
+        { name: "Target Event", icon: <PlusIcon />, path: "/spv/event-targets" },
+        { name: "Kelola Tim SA", icon: <GroupIcon />, path: "/spv/sa" },
+        { name: "Penugasan Dept", icon: <ListIcon />, path: "/spv/assign" },
         {
           name: "Laporan",
           icon: <TableIcon />,
@@ -88,7 +101,6 @@ const AppSidebar: React.FC = () => {
             { name: "Peserta Event", path: "/reports/event-participants" },
           ],
         },
-        { name: "Target Event", icon: <PlusIcon />, path: "/spv/event-targets" },
       ];
     }
 
@@ -100,6 +112,13 @@ const AppSidebar: React.FC = () => {
         { name: "Pendaftaran Event", icon: <ListIcon />, path: "/sa/event-registration" },
         { name: "Rekap Omset Harian", icon: <TableIcon />, path: "/reports/daily-recap" },
         { name: "Laporan Bulanan", icon: <PieChartIcon />, path: "/reports/monthly" },
+      ];
+    }
+
+    if (role === "counter") {
+      return [
+        { name: "Dashboard Counter", icon: <GridIcon />, path: "/" },
+        { name: "Pendaftaran Event", icon: <ListIcon />, path: "/counter/event-registration" },
       ];
     }
 
@@ -189,6 +208,7 @@ const AppSidebar: React.FC = () => {
             nav.path && (
               <Link
                 to={nav.path}
+                onClick={handleLinkClick}
                 className={`menu-item group ${
                   isActive(nav.path) ? "menu-item-active" : "menu-item-inactive"
                 } ${
@@ -230,6 +250,7 @@ const AppSidebar: React.FC = () => {
                   <li key={subItem.name}>
                     <Link
                       to={subItem.path}
+                      onClick={handleLinkClick}
                       className={`menu-dropdown-item ${
                         isActive(subItem.path)
                           ? "menu-dropdown-item-active"

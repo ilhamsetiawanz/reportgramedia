@@ -196,6 +196,7 @@ export default function ManageUsers() {
                           <option value="store_manager">Store Manager</option>
                           <option value="supervisor">Supervisor</option>
                           <option value="store_associate">Store Associate</option>
+                          <option value="counter">Counter</option>
                         </select>
                       </TableCell>
                       <TableCell className="px-5 py-4">

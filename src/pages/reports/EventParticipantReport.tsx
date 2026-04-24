@@ -23,6 +23,7 @@ interface ParticipantRecord {
   created_at: string;
   sa_name: string;
   spv_name: string;
+  counter_name?: string;
 }
 
 export default function EventParticipantReport() {
@@ -107,7 +108,7 @@ export default function EventParticipantReport() {
     doc.setFontSize(10);
     doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 14, 22);
 
-    const tableColumn = ["Nama", "Umur", "Sekolah", "HP", "Kategori", "Pendaftar (SA)"];
+    const tableColumn = ["Nama", "Umur", "Sekolah", "HP", "Kategori", "Pendaftar (SA / Counter)"];
     const tableRows: any[] = [];
 
     participants.forEach(p => {
@@ -117,7 +118,7 @@ export default function EventParticipantReport() {
         p.school_class,
         p.phone,
         p.category,
-        p.sa_name
+        p.counter_name ? `[Counter] ${p.counter_name}` : p.sa_name
       ]);
     });
 
@@ -167,7 +168,7 @@ export default function EventParticipantReport() {
                 <TableCell isHeader className="px-5 py-4">Sekolah / Kelas</TableCell>
                 <TableCell isHeader className="px-5 py-4">Kategori</TableCell>
                 <TableCell isHeader className="px-5 py-4">Telepon</TableCell>
-                <TableCell isHeader className="px-5 py-4">Pendaftar (SA)</TableCell>
+                <TableCell isHeader className="px-5 py-4">Pendaftar (SA / Counter)</TableCell>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -185,8 +186,10 @@ export default function EventParticipantReport() {
                     <TableCell className="px-5 py-4">{p.phone}</TableCell>
                     <TableCell className="px-5 py-4">
                        <div className="flex flex-col">
-                          <span className="font-medium text-brand-600">{p.sa_name}</span>
-                          <span className="text-[10px] text-gray-400">SPV: {p.spv_name}</span>
+                          <span className="font-medium text-brand-600">
+                            {p.counter_name ? `[${p.counter_name}]` : p.sa_name}
+                          </span>
+                          {!p.counter_name && <span className="text-[10px] text-gray-400">SPV: {p.spv_name}</span>}
                        </div>
                     </TableCell>
                   </TableRow>
