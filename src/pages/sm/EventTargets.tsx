@@ -17,12 +17,14 @@ interface SATarget {
   sa_id: string;
   full_name: string;
   target_count: number;
+  target_type: "participants" | "revenue";
 }
 
 interface CounterTarget {
   id?: string;
   counter_name: string;
   target_count: number;
+  target_type: "participants" | "revenue";
 }
 
 export default function EventTargets() {
@@ -33,12 +35,14 @@ export default function EventTargets() {
   
   const [targets, setTargets] = useState<SATarget[]>([]);
   const [counterTargets, setCounterTargets] = useState<CounterTarget[]>([]);
+  const [availableBrands, setAvailableBrands] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // SA Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSA, setEditingSA] = useState<SATarget | null>(null);
   const [targetInput, setTargetInput] = useState(0);
+  const [targetTypeInput, setTargetTypeInput] = useState<"participants" | "revenue">("participants");
 
   // Counter Modal State
   const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
@@ -118,6 +122,7 @@ export default function EventTargets() {
           sa_id: sa.id,
           full_name: sa.full_name,
           target_count: target?.target_count || 0,
+          target_type: target?.target_type || "participants",
         };
       });
 
@@ -140,6 +145,14 @@ export default function EventTargets() {
         .order("counter_name", { ascending: true });
       
       setCounterTargets(data || []);
+
+      // Fetch available brands for this user
+      let brandsQuery = supabase.from("counters").select("id, name");
+      if (profile?.role === 'supervisor') {
+        brandsQuery = brandsQuery.eq('supervisor_id', profile.id);
+      }
+      const { data: brandsData } = await brandsQuery;
+      setAvailableBrands(brandsData || []);
     } catch (error) {
       console.error("Error fetching counter targets:", error);
     } finally {
@@ -151,6 +164,7 @@ export default function EventTargets() {
   const openSetTargetModal = (target: SATarget) => {
     setEditingSA(target);
     setTargetInput(target.target_count);
+    setTargetTypeInput(target.target_type || "participants");
     setIsModalOpen(true);
   };
 
@@ -161,12 +175,16 @@ export default function EventTargets() {
         event_id: selectedEventId,
         sa_id: editingSA.sa_id,
         supervisor_id: profile.id,
-        target_count: targetInput
+        target_count: targetInput,
+        target_type: targetTypeInput
       };
       
       let result;
       if (editingSA.id) {
-        result = await supabase.from("event_targets").update({ target_count: targetInput }).eq("id", editingSA.id);
+        result = await supabase.from("event_targets").update({ 
+          target_count: targetInput,
+          target_type: targetTypeInput
+        }).eq("id", editingSA.id);
       } else {
         result = await supabase.from("event_targets").insert(targetData);
       }
@@ -185,9 +203,11 @@ export default function EventTargets() {
     if (target) {
       setCounterNameInput(target.counter_name);
       setTargetInput(target.target_count);
+      setTargetTypeInput(target.target_type || "participants");
     } else {
       setCounterNameInput("");
       setTargetInput(0);
+      setTargetTypeInput("participants");
     }
     setIsCounterModalOpen(true);
   };
@@ -202,7 +222,8 @@ export default function EventTargets() {
       const targetData = {
         event_id: selectedEventId,
         counter_name: counterNameInput.trim(),
-        target_count: targetInput
+        target_count: targetInput,
+        target_type: targetTypeInput
       };
       
       let result;
@@ -281,7 +302,7 @@ export default function EventTargets() {
                 <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                   <TableRow>
                     <TableCell isHeader className="px-5 py-3 text-start text-theme-xs uppercase">Nama SA</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target Peserta</TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target</TableCell>
                     <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Aksi</TableCell>
                   </TableRow>
                 </TableHeader>
@@ -305,7 +326,9 @@ export default function EventTargets() {
                           {item.full_name}
                         </TableCell>
                         <TableCell className="px-5 py-4 text-end">
-                          <span className="text-brand-600 font-medium">{item.target_count} Peserta</span>
+                          <span className="text-brand-600 font-medium">
+                            {item.target_type === 'revenue' ? `Rp ${item.target_count.toLocaleString()}` : `${item.target_count} Peserta`}
+                          </span>
                         </TableCell>
                         <TableCell className="px-5 py-4 text-end">
                           <Button size="sm" variant="outline" onClick={() => openSetTargetModal(item)}>Set Target</Button>
@@ -325,7 +348,7 @@ export default function EventTargets() {
                 <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                   <TableRow>
                     <TableCell isHeader className="px-5 py-3 text-start text-theme-xs uppercase">Nama Counter</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target Peserta</TableCell>
+                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target</TableCell>
                     <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Aksi</TableCell>
                   </TableRow>
                 </TableHeader>
@@ -349,7 +372,9 @@ export default function EventTargets() {
                           {item.counter_name}
                         </TableCell>
                         <TableCell className="px-5 py-4 text-end">
-                          <span className="text-brand-600 font-medium">{item.target_count} Peserta</span>
+                          <span className="text-brand-600 font-medium">
+                            {item.target_type === 'revenue' ? `Rp ${item.target_count.toLocaleString()}` : `${item.target_count} Peserta`}
+                          </span>
                         </TableCell>
                         <TableCell className="px-5 py-4 text-end">
                           <div className="flex justify-end gap-2">
@@ -373,8 +398,20 @@ export default function EventTargets() {
           <p className="text-sm text-gray-500 mb-6">Staff: {editingSA?.full_name}</p>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Jenis Target</label>
+              <select
+                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                value={targetTypeInput}
+                onChange={(e) => setTargetTypeInput(e.target.value as any)}
+              >
+                <option value="participants">Jumlah Peserta</option>
+                <option value="revenue">Nominal Target (Rupiah)</option>
+              </select>
+            </div>
+
             <InputField
-              label="Target Peserta (Orang)"
+              label={targetTypeInput === 'revenue' ? "Target Nominal (Rp)" : "Target Peserta (Orang)"}
               type="number"
               value={targetInput}
               onChange={(e) => setTargetInput(parseInt(e.target.value) || 0)}
@@ -393,14 +430,34 @@ export default function EventTargets() {
           <h2 className="text-xl font-bold mb-6 dark:text-white">{editingCounter ? "Edit" : "Tambah"} Target Counter</h2>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Pilih Brand Counter</label>
+              <select
+                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                value={counterNameInput}
+                onChange={(e) => setCounterNameInput(e.target.value)}
+              >
+                <option value="">Pilih Brand...</option>
+                {availableBrands.map(b => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Jenis Target</label>
+              <select
+                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                value={targetTypeInput}
+                onChange={(e) => setTargetTypeInput(e.target.value as any)}
+              >
+                <option value="participants">Jumlah Peserta</option>
+                <option value="revenue">Nominal Target (Rupiah)</option>
+              </select>
+            </div>
+
             <InputField
-              label="Nama Counter / Brand"
-              placeholder="Contoh: Counter Faber Castell"
-              value={counterNameInput}
-              onChange={(e) => setCounterNameInput(e.target.value)}
-            />
-            <InputField
-              label="Target Peserta (Orang)"
+              label={targetTypeInput === 'revenue' ? "Target Nominal (Rp)" : "Target Peserta (Orang)"}
               type="number"
               value={targetInput}
               onChange={(e) => setTargetInput(parseInt(e.target.value) || 0)}

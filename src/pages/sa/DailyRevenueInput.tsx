@@ -199,13 +199,15 @@ export default function DailyRevenueInput() {
           .eq('year', currentYearVal),
         // Data waqaf hari ini (milik SA ini)
         supabase.from('waqaf_member_entries')
-          .select('*')
+          .select('waqaf_amount, member_count')
           .eq('sa_id', profile?.id)
-          .eq('date', date)
-          .maybeSingle(),
+          .eq('date', date),
       ]);
 
       // Sales = AKUMULASI bulan (tgl 1 s/d tanggal item), bukan hanya hari ini
+      const dailyMember = dailyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
+      const dailyWaqaf = dailyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
+      
       const accRev = accRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const accMember = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
       const accWaqaf = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
@@ -219,7 +221,6 @@ export default function DailyRevenueInput() {
 
       const formattedDate = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
-      const waqafToday = dailyWMRes.data;
 
       // Breakdown akumulasi omset per departemen
       let deptOmsetLines = '';
@@ -234,8 +235,8 @@ export default function DailyRevenueInput() {
 
       const message = `*Report Harian, ${formattedDate}*
 Nama : ${profile?.full_name}
-My Value : ${waqafToday?.member_count || 0}
-Waqaf : ${(waqafToday?.waqaf_amount || 0) > 0 ? 'Rp ' + (waqafToday?.waqaf_amount || 0).toLocaleString('id-ID') : '-'}
+My Value : ${dailyMember}
+Waqaf : ${dailyWaqaf > 0 ? 'Rp ' + dailyWaqaf.toLocaleString('id-ID') : '-'}
 
 *Akumulasi 1 - ${new Date(date).getDate()} ${currentMonthName} ${new Date(date).getFullYear()}*
 My Value : ${accMember}

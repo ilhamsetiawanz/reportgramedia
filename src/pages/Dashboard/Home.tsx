@@ -251,6 +251,38 @@ export default function Home() {
       
       // ===== QUERY: Omset berdasarkan DEPARTMENT (tanpa filter sa_id) =====
       // Agar data tetap muncul meskipun departemen di-take over SA baru
+      let wmQuery = supabase.from('waqaf_member_entries')
+        .select('waqaf_amount, member_count')
+        .in('date', [dateToday]); // Fallback check
+
+      let monthlyWMQuery = supabase.from('waqaf_member_entries')
+        .select('waqaf_amount, member_count')
+        .gte('date', startOfMonth)
+        .lte('date', dateToday);
+
+      if (isSA) {
+        wmQuery = wmQuery.eq('sa_id', profile?.id);
+        monthlyWMQuery = monthlyWMQuery.eq('sa_id', profile?.id);
+      } else if (targetDeptIds.length > 0) {
+        // Aggregation for SM/SPV: Get all SAs in these departments
+        const { data: saInDepts } = await supabase
+          .from('monthly_assignments')
+          .select('sa_id')
+          .in('department_id', targetDeptIds)
+          .eq('month', currentMonthVal)
+          .eq('year', currentYearVal);
+        
+        const saIds = saInDepts?.map(s => s.sa_id) || [];
+        if (saIds.length > 0) {
+          wmQuery = wmQuery.in('sa_id', saIds);
+          monthlyWMQuery = monthlyWMQuery.in('sa_id', saIds);
+        } else {
+          // No SAs assigned, return empty results
+          wmQuery = wmQuery.eq('sa_id', '00000000-0000-0000-0000-000000000000');
+          monthlyWMQuery = monthlyWMQuery.eq('sa_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
       const [accRevRes, dailyWMRes, monthlyWMRes, targetRes] = await Promise.all([
         // Akumulasi omset bulan ini per departemen (SEMUA SA, tanpa filter sa_id)
         supabase.from('daily_revenue')
@@ -260,19 +292,11 @@ export default function Home() {
           .gte('date', startOfMonth)
           .lte('date', dateToday),
         
-        // Waqaf hari ini (milik SA ini)
-        supabase.from('waqaf_member_entries')
-          .select('waqaf_amount, member_count')
-          .eq('sa_id', profile?.id)
-          .eq('date', dateToday)
-          .maybeSingle(),
+        // Waqaf hari ini (Aggregated or SA-specific)
+        wmQuery,
         
-        // Akumulasi waqaf bulan ini (milik SA ini)
-        supabase.from('waqaf_member_entries')
-          .select('waqaf_amount, member_count')
-          .eq('sa_id', profile?.id)
-          .gte('date', startOfMonth)
-          .lte('date', dateToday),
+        // Akumulasi waqaf bulan ini (Aggregated or SA-specific)
+        monthlyWMQuery,
         
         // Target bulanan
         supabase.from('monthly_targets')
@@ -282,8 +306,8 @@ export default function Home() {
           .eq('year', currentYearVal),
       ]);
 
-      const dailyMember = dailyWMRes.data?.member_count || 0;
-      const dailyWaqaf = dailyWMRes.data?.waqaf_amount || 0;
+      const dailyMember = dailyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
+      const dailyWaqaf = dailyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
 
       // Sales = AKUMULASI bulan (tgl 1 s/d hari ini), bukan hanya hari ini
       const accRev = accRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;

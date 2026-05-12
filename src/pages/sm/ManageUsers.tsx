@@ -15,11 +15,18 @@ interface UserProfile {
   is_approved: boolean;
   is_active: boolean;
   supervisor_id: string | null;
+  counter_id: string | null;
+}
+
+interface Counter {
+  id: string;
+  name: string;
 }
 
 export default function ManageUsers() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [supervisors, setSupervisors] = useState<UserProfile[]>([]);
+  const [counters, setCounters] = useState<Counter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Edit State
@@ -44,6 +51,10 @@ export default function ManageUsers() {
       
       // Filter for potential supervisors
       setSupervisors(data?.filter(u => u.role === "supervisor") || []);
+
+      // Fetch counters
+      const { data: counterData } = await supabase.from("counters").select("id, name");
+      setCounters(counterData || []);
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
@@ -107,6 +118,20 @@ export default function ManageUsers() {
     }
   }
 
+  async function handleAssignCounter(userId: string, counterId: string) {
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({ counter_id: counterId === "" ? null : counterId })
+        .eq("id", userId);
+      
+      if (error) throw error;
+      fetchUsers();
+    } catch (error) {
+      alert("Gagal update counter: " + (error as any).message);
+    }
+  }
+
   async function handleHardDelete(userId: string, fullName: string) {
     const confirm1 = confirm(`PERINGATAN: Apakah Anda yakin ingin menghapus "${fullName}" secara PERMANEN? \n\nTindakan ini akan menghapus SELURUH data omset dan laporan yang pernah dibuat oleh user ini dan tidak bisa dikembalikan.`);
     if (!confirm1) return;
@@ -164,7 +189,7 @@ export default function ManageUsers() {
                   <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Nama & Email</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Role</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Status</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Supervisor</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Supervisor / Brand</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
                 </TableRow>
               </TableHeader>
@@ -219,6 +244,17 @@ export default function ManageUsers() {
                             <option value="">Pilih SPV...</option>
                             {supervisors.map(spv => (
                               <option key={spv.id} value={spv.id}>{spv.full_name}</option>
+                            ))}
+                          </select>
+                        ) : user.role === "counter" ? (
+                          <select 
+                            className="bg-transparent text-sm border rounded px-2 py-1 outline-none max-w-[150px] dark:bg-gray-900 dark:border-gray-800"
+                            value={user.counter_id || ""}
+                            onChange={(e) => handleAssignCounter(user.id, e.target.value)}
+                          >
+                            <option value="">Pilih Brand...</option>
+                            {counters.map(c => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                           </select>
                         ) : (

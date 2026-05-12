@@ -32,6 +32,8 @@ import EventTargets from "./pages/sm/EventTargets";
 import EventRegistration from "./pages/sa/EventRegistration";
 import EventParticipantReport from "./pages/reports/EventParticipantReport";
 import CounterEventRegistration from "./pages/counter/CounterEventRegistration";
+import ManageCounters from "./pages/sm/ManageCounters";
+import CounterWeeklyRevenue from "./pages/counter/CounterWeeklyRevenue";
 
 
 /**
@@ -120,6 +122,7 @@ export default function App() {
           <Route path="/sm/targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageDepartments /></ProtectedRoute>} />
           <Route path="/sm/events" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageEvents /></ProtectedRoute>} />
           <Route path="/sm/event-targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><EventTargets /></ProtectedRoute>} />
+          <Route path="/sm/counters" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageCounters /></ProtectedRoute>} />
 
           {/* SPV Routes */}
           <Route path="/spv/sa" element={<ProtectedRoute allowedRoles={["supervisor"]}><ManageSA /></ProtectedRoute>} />
@@ -138,6 +141,7 @@ export default function App() {
 
           {/* Counter Routes */}
           <Route path="/counter/event-registration" element={<ProtectedRoute allowedRoles={["counter"]}><CounterEventRegistration /></ProtectedRoute>} />
+          <Route path="/counter/weekly-revenue" element={<ProtectedRoute allowedRoles={["counter"]}><CounterWeeklyRevenue /></ProtectedRoute>} />
 
           {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
           <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager"]}><DailyReport /></ProtectedRoute>} />

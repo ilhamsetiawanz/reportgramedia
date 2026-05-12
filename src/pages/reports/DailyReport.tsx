@@ -120,11 +120,13 @@ export default function DailyReport() {
       let targetDeptIds = [item.department_id];
       let deptLabel = item.departments?.name;
 
+      const targetSAId = item.sa_id;
+      
       if (isSA) {
         const { data: assignments } = await supabase
           .from('monthly_assignments')
           .select('department_id')
-          .eq('sa_id', item.sa_id)
+          .eq('sa_id', targetSAId)
           .eq('month', currentMonthVal)
           .eq('year', currentYearVal);
         
@@ -135,17 +137,17 @@ export default function DailyReport() {
       }
       
       const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes] = await Promise.all([
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', startOfMonth).lte('date', date),
+        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', targetSAId).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
+        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', targetSAId).gte('date', startOfMonth).lte('date', date),
         supabase.from('monthly_targets').select('target_amount, last_year_amount').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
-        supabase.from('waqaf_member_entries').select('*').eq('sa_id', profile?.id).eq('date', date).single()
+        supabase.from('waqaf_member_entries').select('*').eq('sa_id', targetSAId).eq('date', date).maybeSingle()
       ]);
 
       const dailyRevToday = await supabase
         .from('daily_revenue')
         .select('amount')
         .in('department_id', targetDeptIds)
-        .eq('sa_id', profile?.id)
+        .eq('sa_id', targetSAId)
         .eq('date', date)
         .eq('status', 'approved');
 

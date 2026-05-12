@@ -66,6 +66,7 @@ const AppSidebar: React.FC = () => {
         { name: "Target Omset", icon: <DollarLineIcon />, path: "/sm/targets" },
         { name: "Kelola Dept", icon: <FolderIcon />, path: "/sm/departments" },
         { name: "Kelola User", icon: <GroupIcon />, path: "/sm/users" },
+        { name: "Kelola Brand", icon: <PlusIcon />, path: "/sm/counters" },
         {
           name: "Laporan",
           icon: <PieChartIcon />,
@@ -118,6 +119,7 @@ const AppSidebar: React.FC = () => {
     if (role === "counter") {
       return [
         { name: "Dashboard Counter", icon: <GridIcon />, path: "/" },
+        { name: "Input Omset Mingguan", icon: <DollarLineIcon />, path: "/counter/weekly-revenue" },
         { name: "Pendaftaran Event", icon: <ListIcon />, path: "/counter/event-registration" },
       ];
     }
