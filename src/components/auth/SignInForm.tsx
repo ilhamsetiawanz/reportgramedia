@@ -44,7 +44,14 @@ export default function SignInForm() {
       }
     } catch (err: any) {
       console.error("Sign in error:", err.message);
-      setLocalError(err.message || "Gagal masuk. Periksa kembali email dan password Anda.");
+      let errorMessage = err.message || "Gagal masuk. Periksa kembali email dan password Anda.";
+      
+      // Penanganan khusus untuk email yang belum dikonfirmasi
+      if (err.message?.toLowerCase().includes("email not confirmed")) {
+        errorMessage = "Email Anda belum dikonfirmasi. Silakan cek inbox (atau spam) email Anda untuk melakukan aktivasi.";
+      }
+      
+      setLocalError(errorMessage);
     } finally {
       setLoading(false);
     }

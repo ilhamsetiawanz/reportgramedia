@@ -43,7 +43,12 @@ export default function SignUpForm() {
       if (signUpError) throw signUpError;
 
       if (data.user) {
-        alert("Pendaftaran berhasil! Silakan tunggu persetujuan dari Store Manager.");
+        // Jika email confirmation aktif, session biasanya akan null sampai dikonfirmasi
+        if (!data.session) {
+          alert("Pendaftaran berhasil! Silakan cek email Anda untuk melakukan konfirmasi akun sebelum login.");
+        } else {
+          alert("Pendaftaran berhasil! Silakan tunggu persetujuan dari Store Manager.");
+        }
         navigate("/signin");
       }
     } catch (err: any) {

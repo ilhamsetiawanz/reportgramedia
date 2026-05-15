@@ -12,44 +12,39 @@ interface Event {
   id: string;
   name: string;
   description: string;
-  categories: string[];
-  registration_deadline: string;
+  start_date: string;
+  end_date: string;
+  type: string;
+  categories: string;
+  reg_link: string;
+  max_participants: number;
 }
 
-interface Participant {
+interface Registration {
   id: string;
-  name: string;
-  age: number;
-  school_class: string;
-  phone: string;
-  category: string;
-  counter_name: string;
+  full_name: string;
+  category_selected: string;
+  phone_number: string;
+  payment_amount: number;
   created_at: string;
-}
-
-interface CounterTarget {
-  counter_name: string;
-  target_count: number;
 }
 
 export default function CounterEventRegistration() {
   const { profile } = useAuthStore();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [availableCounters, setAvailableCounters] = useState<CounterTarget[]>([]);
-  const [selectedCounterName, setSelectedCounterName] = useState<string>("");
   
-  const [target, setTarget] = useState<number>(0);
-  const [history, setHistory] = useState<Participant[]>([]);
+  const [targetType, setTargetType] = useState<"peserta" | "nominal">("peserta");
+  const [targetValue, setTargetValue] = useState<number>(0);
+  
+  const [history, setHistory] = useState<Registration[]>([]);
+  const [totalEventReg, setTotalEventReg] = useState<number>(0);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: "",
-    age: "",
-    school_class: "",
-    address: "",
-    phone: "",
-    category: ""
+    full_name: "", gender: "Laki-laki", dob: "", email: "",
+    phone_number: "", instagram: "", category_selected: "", address: "",
+    payment_amount: ""
   });
 
   useEffect(() => {
@@ -57,302 +52,180 @@ export default function CounterEventRegistration() {
   }, []);
 
   useEffect(() => {
-    if (selectedEvent) {
-      fetchCounterOptions();
-    }
-  }, [selectedEvent]);
-
-  useEffect(() => {
-    if (selectedEvent && selectedCounterName) {
+    if (selectedEvent && profile) {
       fetchProgressAndHistory();
-    } else {
-      setHistory([]);
-      setTarget(0);
     }
-  }, [selectedEvent, selectedCounterName]);
+  }, [selectedEvent, profile]);
 
   async function fetchActiveEvents() {
-    const { data } = await supabase
-      .from("events")
-      .select("*")
-      .eq("is_active", true)
-      .order("registration_deadline", { ascending: true });
-
-    setEvents(data || []);
-    if (data && data.length > 0) {
-      setSelectedEvent(data[0]);
-    }
-  }
-
-  async function fetchCounterOptions() {
-    if (!selectedEvent) return;
     try {
-      const { data } = await supabase
-        .from("event_counter_targets")
-        .select("counter_name, target_count")
-        .eq("event_id", selectedEvent.id)
-        .order("counter_name", { ascending: true });
-        
-      setAvailableCounters(data || []);
-      if (data && data.length > 0) {
-        setSelectedCounterName(data[0].counter_name);
-      } else {
-        setSelectedCounterName("");
-      }
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setEvents(data || []);
+      if (data && data.length > 0) setSelectedEvent(data[0]);
     } catch (error) {
-      console.error("Error fetching counter options:", error);
+      alert("Error: " + (error as any).message);
     }
   }
 
   async function fetchProgressAndHistory() {
-    if (!selectedEvent || !selectedCounterName) return;
+    if (!profile || !selectedEvent) return;
     try {
-      const currentTargetData = availableCounters.find(c => c.counter_name === selectedCounterName);
-      setTarget(currentTargetData?.target_count || 0);
+      const { data: targetData } = await supabase
+        .from("event_targets")
+        .select("target_count, target_type, target_amount")
+        .eq("event_id", selectedEvent.id)
+        .eq("sa_id", profile.id)
+        .single();
+
+      if (targetData) {
+        setTargetType(targetData.target_type);
+        setTargetValue(targetData.target_type === 'nominal' ? targetData.target_amount : targetData.target_count);
+      } else {
+        setTargetType("peserta");
+        setTargetValue(0);
+      }
 
       const { data: historyData } = await supabase
-        .from("event_participants")
+        .from("event_registrations")
         .select("*")
         .eq("event_id", selectedEvent.id)
-        .eq("counter_name", selectedCounterName)
+        .eq("registered_by", profile.id)
         .order("created_at", { ascending: false });
 
       setHistory(historyData || []);
+
+      const { count } = await supabase
+        .from("event_registrations")
+        .select("*", { count: 'exact', head: true })
+        .eq("event_id", selectedEvent.id);
+      setTotalEventReg(count || 0);
     } catch (error) {
-      console.error("Error fetching progress:", error);
+      console.error("Error:", error);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedEvent || !profile || !selectedCounterName) {
-      alert("Harap lengkapi pilihan Event dan Nama Counter terlebih dahulu.");
-      return;
-    }
-
-    if (new Date() > new Date(selectedEvent.registration_deadline)) {
-      alert("Pendaftaran sudah ditutup untuk event ini.");
-      return;
+    if (!selectedEvent || !profile) return;
+    if (selectedEvent.max_participants > 0 && totalEventReg >= selectedEvent.max_participants) {
+      alert("Kuota pendaftaran penuh."); return;
     }
 
     setIsSubmitLoading(true);
     try {
-      const { error } = await supabase.from("event_participants").insert([{
+      const { error } = await supabase.from("event_registrations").insert([{
         event_id: selectedEvent.id,
-        sa_id: profile.id, // Record the counter account user id just in case
-        counter_name: selectedCounterName,
-        name: formData.name,
-        age: parseInt(formData.age),
-        school_class: formData.school_class,
+        registered_by: profile.id,
+        full_name: formData.full_name,
+        gender: formData.gender,
+        dob: formData.dob,
+        email: formData.email,
+        phone_number: formData.phone_number,
+        instagram: formData.instagram,
+        category_selected: formData.category_selected,
         address: formData.address,
-        phone: formData.phone,
-        category: formData.category
+        payment_amount: parseFloat(formData.payment_amount) || 0
       }]);
 
       if (error) throw error;
-
-      alert("Peserta Counter berhasil didaftarkan!");
+      alert("Pendaftaran Counter berhasil!");
       setFormData({
-        name: "",
-        age: "",
-        school_class: "",
-        address: "",
-        phone: "",
-        category: selectedEvent.categories?.[0] || ""
+        full_name: "", gender: "Laki-laki", dob: "", email: "",
+        phone_number: "", instagram: "", category_selected: "", address: "",
+        payment_amount: ""
       });
       fetchProgressAndHistory();
     } catch (error) {
-      alert("Gagal daftar: " + (error as any).message);
+      alert("Gagal: " + (error as any).message);
     } finally {
       setIsSubmitLoading(false);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Hapus pendaftaran peserta ini?")) return;
-    try {
-      const { error } = await supabase.from("event_participants").delete().eq("id", id);
-      if (error) throw error;
-      fetchProgressAndHistory();
-    } catch (error) {
-      alert("Gagal hapus: " + (error as any).message);
-    }
-  }
+  const currentAchievement = targetType === 'nominal' 
+    ? history.reduce((sum, item) => sum + (item.payment_amount || 0), 0)
+    : history.length;
 
-  const isDeadlinePassed = selectedEvent ? (new Date() > new Date(selectedEvent.registration_deadline)) : false;
+  const percent = Math.min(Math.round((currentAchievement / (targetValue || 1)) * 100), 100);
 
   return (
     <>
-      <PageMeta title="Pendaftaran Counter | Gramedia Tracker" description="Input data peserta event dari Counter" />
+      <PageMeta title="Registrasi Event (Counter) | Gramedia" description="Monitoring target nominal dan peserta Counter." />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pendaftaran Event (Counter)</h1>
-            <p className="text-sm text-gray-500">Pilih event dan nama counter sebelum mendaftarkan peserta.</p>
+            <h1 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Registrasi Counter</h1>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">Target: {targetType === 'nominal' ? 'Nominal (Rp)' : 'Orang'}</p>
           </div>
 
-          <div className="flex gap-3">
-             <select
-              className="h-10 px-3 border border-brand-200 rounded-lg bg-brand-50 text-brand-700 font-medium outline-none min-w-[200px]"
-              value={selectedCounterName}
-              onChange={(e) => setSelectedCounterName(e.target.value)}
-            >
-              <option value="">-- Pilih Asal Counter --</option>
-              {availableCounters.map(c => (
-                <option key={c.counter_name} value={c.counter_name}>{c.counter_name}</option>
-              ))}
-            </select>
-            <select
-              className="h-10 px-3 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none min-w-[200px]"
-              value={selectedEvent?.id || ""}
-              onChange={(e) => setSelectedEvent(events.find(ev => ev.id === e.target.value) || null)}
-            >
-              <option value="">-- Pilih Event --</option>
-              {events.map(ev => (
-                <option key={ev.id} value={ev.id}>{ev.name} ({new Date(ev.registration_deadline).toLocaleDateString()})</option>
-              ))}
-            </select>
-          </div>
+          <select className="h-10 px-4 border border-brand-200 rounded-lg bg-brand-50 text-brand-700 outline-none min-w-[250px] text-xs font-black uppercase" value={selectedEvent?.id || ""} onChange={(e) => setSelectedEvent(events.find(ev => ev.id === e.target.value) || null)}>
+            {events.map(ev => (<option key={ev.id} value={ev.id}>{ev.name}</option>))}
+          </select>
         </div>
 
-        {selectedEvent && selectedCounterName && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Progress Card */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                <h3 className="text-sm font-medium text-gray-500 mb-4">Progres Target {selectedCounterName}</h3>
+        {selectedEvent && (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="lg:col-span-1 space-y-5">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 dark:bg-white/[0.03] shadow-sm">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Monitoring Capaian</h3>
                 <div className="flex items-end justify-between mb-2">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-white">{history.length} <span className="text-sm font-normal text-gray-500">/ {target}</span></span>
-                  <Badge color={history.length >= target ? "success" : "warning"}>
-                    {history.length >= target ? "Target Tercapai" : "Belum Target"}
-                  </Badge>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 dark:bg-gray-800">
-                  <div
-                    className="bg-brand-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min((history.length / (target || 1)) * 100, 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Detail Event</h3>
-                <p className="text-xs text-gray-500 mb-4">{selectedEvent.description || "Tidak ada deskripsi."}</p>
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">Deadline:</span>
-                    <span className={`font-medium ${isDeadlinePassed ? "text-error-500" : "text-gray-900 dark:text-white"}`}>
-                      {new Date(selectedEvent.registration_deadline).toLocaleDateString('id-ID', { dateStyle: 'long' })}
+                  <div className="flex flex-col">
+                    <span className="text-2xl font-black text-gray-900 dark:text-white">
+                      {targetType === 'nominal' ? `Rp ${currentAchievement.toLocaleString()}` : `${currentAchievement} Peserta`}
                     </span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Target: {targetType === 'nominal' ? `Rp ${targetValue.toLocaleString()}` : `${targetValue}`}</span>
                   </div>
-                  {isDeadlinePassed && (
-                    <Badge color="error">Pendaftaran Tutup</Badge>
-                  )}
+                  <Badge color={currentAchievement >= targetValue ? "success" : "warning"}>{percent}%</Badge>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 dark:bg-gray-800 overflow-hidden">
+                  <div className="bg-brand-500 h-full rounded-full transition-all duration-700" style={{ width: `${percent}%` }}></div>
                 </div>
               </div>
             </div>
 
-            {/* Registration Form */}
-            <div className="lg:col-span-2">
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">Formulir Peserta Baru ({selectedCounterName})</h2>
-                {isDeadlinePassed ? (
-                  <div className="p-10 text-center border-2 border-dashed border-gray-200 rounded-xl">
-                    <p className="text-gray-400 italic">Pendaftaran untuk event ini sudah ditutup otomatis karena melewati batas tanggal pendaftaran.</p>
+            <div className="lg:col-span-2 space-y-5">
+              <div className="rounded-xl border border-gray-200 bg-white p-6 dark:bg-white/[0.03] shadow-sm">
+                <h2 className="mb-5 text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Form Pendaftaran Counter</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2"><InputField label="Nama Lengkap" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required /></div>
+                    <InputField label="Tgl Lahir" type="date" value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} required />
+                    <InputField label="Nomor WhatsApp" placeholder="08..." value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} required />
+                    <InputField label="Kategori" placeholder="SD / Umum" value={formData.category_selected} onChange={(e) => setFormData({ ...formData, category_selected: e.target.value })} />
+                    <InputField label="Nominal (Rp)" type="number" placeholder="Angka saja" value={formData.payment_amount} onChange={(e) => setFormData({ ...formData, payment_amount: e.target.value })} required />
+                    <div className="md:col-span-2">
+                         <InputField label="Alamat / Domisili" placeholder="Alamat lengkap" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
+                    </div>
                   </div>
-                ) : (
-                  <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <InputField
-                        label="Nama Lengkap Peserta"
-                        placeholder="Masukkan nama lengkap peserta"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <InputField
-                      label="Umur"
-                      type="number"
-                      value={formData.age}
-                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      required
-                    />
-                    <InputField
-                      label="Sekolah / Kelas"
-                      placeholder="Contoh: SDN 1 Kendari / 3"
-                      value={formData.school_class}
-                      onChange={(e) => setFormData({ ...formData, school_class: e.target.value })}
-                      required
-                    />
-                    <div className="md:col-span-2">
-                      <InputField
-                        label="Alamat"
-                        placeholder="Masukkan alamat lengkap"
-                        value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <InputField
-                      label="Telepon / HP"
-                      placeholder="Contoh: 08123456789"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      required
-                    />
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Kategori Lomba</label>
-                      <select
-                        className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        required
-                      >
-                        <option value="">Pilih Kategori...</option>
-                        {selectedEvent.categories?.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="md:col-span-2 pt-2">
-                      <Button type="submit" disabled={isSubmitLoading} className="w-full">
-                        {isSubmitLoading ? "Mendaftar..." : "Daftarkan Peserta Counter"}
-                      </Button>
-                    </div>
-                  </form>
-                )}
+                  <Button type="submit" disabled={isSubmitLoading} className="w-full py-3 text-xs font-black uppercase tracking-widest bg-brand-600 hover:bg-brand-700">{isSubmitLoading ? "Memproses..." : "Daftarkan Peserta"}</Button>
+                </form>
               </div>
 
-              {/* Local History Table */}
-              <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">Peserta Terdaftar ({selectedCounterName})</h2>
+              <div className="rounded-xl border border-gray-200 bg-white p-5 dark:bg-white/[0.03] shadow-sm overflow-hidden">
+                <h2 className="mb-4 text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Riwayat Pendaftaran Counter</h2>
                 <div className="max-w-full overflow-x-auto">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="bg-gray-50/50 dark:bg-white/[0.02]">
                       <TableRow>
-                        <TableCell isHeader className="px-4 py-3 text-theme-xs">Nama</TableCell>
-                        <TableCell isHeader className="px-4 py-3 text-theme-xs">Kategori</TableCell>
-                        <TableCell isHeader className="px-4 py-3 text-theme-xs">HP</TableCell>
-                        <TableCell isHeader className="px-4 py-3 text-end text-theme-xs">Aksi</TableCell>
+                        <TableCell isHeader className="px-4 py-2 text-[10px] font-black uppercase">Nama</TableCell>
+                        <TableCell isHeader className="px-4 py-2 text-end text-[10px] font-black uppercase">Nominal</TableCell>
+                        <TableCell isHeader className="px-4 py-2 text-end text-[10px] font-black uppercase">Aksi</TableCell>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {history.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-6 text-gray-400 italic">Belum ada peserta yang didaftarkan.</TableCell>
-                        </TableRow>
-                      ) : (
+                    <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+                      {history.length === 0 ? (<TableRow><TableCell colSpan={3} className="text-center py-6 text-[10px] text-gray-400 italic">Belum ada pendaftaran.</TableCell></TableRow>) : (
                         history.map(item => (
                           <TableRow key={item.id}>
-                            <TableCell className="px-4 py-3 text-sm font-medium">{item.name}</TableCell>
-                            <TableCell className="px-4 py-3 text-sm">{item.category}</TableCell>
-                            <TableCell className="px-4 py-3 text-sm">{item.phone}</TableCell>
-                            <TableCell className="px-4 py-3 text-end">
-                              <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-error-500">
-                                <TrashBinIcon className="size-4" />
-                              </button>
+                            <TableCell className="px-4 py-2 text-[11px] font-bold text-gray-900 dark:text-white">{item.full_name}</TableCell>
+                            <TableCell className="px-4 py-2 text-end text-[10px] font-black text-brand-600">Rp {item.payment_amount?.toLocaleString()}</TableCell>
+                            <TableCell className="px-4 py-2 text-end">
+                              <button onClick={() => alert("Hapus tidak diizinkan.")} className="text-gray-300"><TrashBinIcon className="size-3.5" /></button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -363,11 +236,6 @@ export default function CounterEventRegistration() {
               </div>
             </div>
           </div>
-        )}
-        {selectedEvent && !selectedCounterName && (
-           <div className="p-10 text-center border border-gray-200 rounded-xl bg-white">
-              <p className="text-gray-500">Pilih Asal Counter terlebih dahulu di bagian atas untuk mulai mendaftar.</p>
-           </div>
         )}
       </div>
     </>

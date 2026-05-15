@@ -45,22 +45,22 @@ export default function ManageDepartments() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Form State
-  const [newDept, setNewDept] = useState({ name: "", code: "", supervisor_id: "" });
+  const [newDept, setNewDept] = useState({ name: "", code: "" });
   const [supervisors, setSupervisors] = useState<{ id: string, full_name: string }[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string>>({}); // deptId -> spvId
-  const [monthlyTargets, setMonthlyTargets] = useState<Record<string, number>>({}); 
-  
+  const [monthlyTargets, setMonthlyTargets] = useState<Record<string, number>>({});
+
   // CRUD State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [editForm, setEditForm] = useState({ name: "", code: "" });
-  
+
   // Custom Dept State
   const [isOther, setIsOther] = useState(false);
   const [customName, setCustomName] = useState("");
-  
+
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -76,7 +76,7 @@ export default function ManageDepartments() {
         .from("departments")
         .select("*, users!departments_supervisor_id_fkey(full_name)")
         .order("name");
-      
+
       if (deptError) throw deptError;
       setDepartments(deptData || []);
 
@@ -86,7 +86,7 @@ export default function ManageDepartments() {
         .select("id, full_name")
         .eq("role", "supervisor")
         .eq("is_approved", true);
-      
+
       setSupervisors(spvData || []);
 
       // Fetch current month targets
@@ -95,7 +95,7 @@ export default function ManageDepartments() {
         .select("department_id, target_amount")
         .eq("year", selectedYear)
         .eq("month", selectedMonth);
-      
+
       if (targetError) throw targetError;
 
       // Fetch Monthly Assignments (SPV & SA Plotting)
@@ -104,15 +104,15 @@ export default function ManageDepartments() {
         .select("department_id, supervisor_id, sa_id")
         .eq("year", selectedYear)
         .eq("month", selectedMonth);
-      
+
       const deptAssignMap: Record<string, string> = {};
       assignData?.forEach(a => {
-         if (a.department_id && a.supervisor_id) {
-           deptAssignMap[a.department_id] = a.supervisor_id;
-         }
+        if (a.department_id && a.supervisor_id) {
+          deptAssignMap[a.department_id] = a.supervisor_id;
+        }
       });
       setAssignments(deptAssignMap);
-      
+
       const targetMap: Record<string, number> = {};
       targetData?.forEach(t => {
         targetMap[t.department_id] = t.target_amount;
@@ -131,17 +131,16 @@ export default function ManageDepartments() {
       const finalName = isOther ? customName : newDept.name;
       if (!finalName) return alert("Pilih atau isi nama departemen!");
 
-      const { error } = await supabase
+      const { error: deptError } = await supabase
         .from("departments")
-        .insert([{ 
-          name: finalName, 
-          code: newDept.code.toUpperCase(),
-          supervisor_id: newDept.supervisor_id || null
+        .insert([{
+          name: finalName,
+          code: newDept.code.toUpperCase()
         }]);
-      
-      if (error) throw error;
-      
-      setNewDept({ name: "", code: "", supervisor_id: "" });
+
+      if (deptError) throw deptError;
+
+      setNewDept({ name: "", code: "" });
       setCustomName("");
       setIsOther(false);
       setIsModalOpen(false);
@@ -165,12 +164,12 @@ export default function ManageDepartments() {
     try {
       const { error } = await supabase
         .from("departments")
-        .update({ 
-          name: editForm.name, 
-          code: editForm.code.toUpperCase() 
+        .update({
+          name: editForm.name,
+          code: editForm.code.toUpperCase()
         })
         .eq("id", editingDept.id);
-      
+
       if (error) throw error;
       setIsEditModalOpen(false);
       fetchData();
@@ -181,13 +180,13 @@ export default function ManageDepartments() {
 
   async function handleDeleteDepartment(deptId: string, deptName: string) {
     if (!confirm(`Apakah Anda yakin ingin menghapus departemen "${deptName}" secara permanen?\n\nTindakan ini dapat berpengaruh pada histori laporan yang terkait dengan departemen ini.`)) return;
-    
+
     try {
       const { error } = await supabase
         .from("departments")
         .delete()
         .eq("id", deptId);
-      
+
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -201,7 +200,7 @@ export default function ManageDepartments() {
         .from("departments")
         .update({ is_active: !dept.is_active })
         .eq("id", dept.id);
-      
+
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -212,22 +211,22 @@ export default function ManageDepartments() {
 
   async function handleUpdateSPV(deptId: string, spvId: string) {
     try {
-      // Manual Assignment per Month
       const { error } = await supabase
         .from("monthly_assignments")
         .upsert({
           department_id: deptId,
+          supervisor_id: spvId || null,
           year: selectedYear,
-          month: selectedMonth,
-          supervisor_id: spvId || null
-        }, { onConflict: 'department_id,year,month' });
-      
+          month: selectedMonth
+        }, { onConflict: 'department_id,month,year' });
+
       if (error) throw error;
-      
+
       setAssignments(prev => ({ ...prev, [deptId]: spvId }));
       alert("Penugasan SPV berhasil disimpan!");
-    } catch (error) {
-      alert("Gagal update SPV: " + (error as any).message);
+    } catch (error: any) {
+      console.error("Error updating SPV:", error);
+      alert("Gagal update SPV: " + error.message);
     }
   }
 
@@ -235,7 +234,7 @@ export default function ManageDepartments() {
   return (
     <>
       <PageMeta title="Kelola Departemen | Gramedia Tracker" description="Manajemen departemen dan target bulanan" />
-      
+
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
@@ -243,24 +242,24 @@ export default function ManageDepartments() {
             <p className="text-gray-500 dark:text-gray-400 text-sm italic">Periode: {selectedMonth}/{selectedYear}</p>
           </div>
           <div className="flex items-center gap-3">
-             <select 
-               className="h-9 px-2 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs"
-               value={selectedMonth}
-               onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-             >
-               {Array.from({ length: 12 }, (_, i) => (
-                 <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('id-ID', { month: 'long' })}</option>
-               ))}
-             </select>
-             <select 
-               className="h-9 px-2 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs"
-               value={selectedYear}
-               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-             >
-               {[selectedYear-1, selectedYear, selectedYear+1].map(y => (
-                 <option key={y} value={y}>{y}</option>
-               ))}
-             </select>
+            <select
+              className="h-9 px-2 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            >
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>{new Date(0, i).toLocaleString('id-ID', { month: 'long' })}</option>
+              ))}
+            </select>
+            <select
+              className="h-9 px-2 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            >
+              {[selectedYear - 1, selectedYear, selectedYear + 1].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
             <Button onClick={() => setIsModalOpen(true)} size="sm" startIcon={<PlusIcon />}>
               Tambah Departemen
             </Button>
@@ -273,9 +272,9 @@ export default function ManageDepartments() {
               <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                 <TableRow>
                   <TableCell isHeader className="px-5 py-3 text-start">Kode</TableCell>
-                   <TableCell isHeader className="px-5 py-3 text-start">Nama Departemen</TableCell>
-                   <TableCell isHeader className="px-5 py-3 text-start">Supervisor</TableCell>
-                   <TableCell isHeader className="px-5 py-3 text-start">Status</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start">Nama Departemen</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start">Supervisor</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start">Status</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Target Bulan Ini</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
                 </TableRow>
@@ -293,21 +292,21 @@ export default function ManageDepartments() {
                   departments.map((dept) => (
                     <TableRow key={dept.id}>
                       <TableCell className="px-5 py-4 font-bold text-brand-600">{dept.code}</TableCell>
-                       <TableCell className="px-5 py-4 text-gray-800 dark:text-white/90">{dept.name}</TableCell>
-                       <TableCell className="px-5 py-4 min-w-[200px]">
-                         <select 
-                           className="h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                           value={assignments[dept.id] || ""}
-                           onChange={(e) => handleUpdateSPV(dept.id, e.target.value)}
-                         >
-                           <option value="">-- Plot SPV --</option>
-                           {supervisors.map(spv => (
-                             <option key={spv.id} value={spv.id}>{spv.full_name}</option>
-                           ))}
-                         </select>
-                       </TableCell>
+                      <TableCell className="px-5 py-4 text-gray-800 dark:text-white/90">{dept.name}</TableCell>
+                      <TableCell className="px-5 py-4 min-w-[200px]">
+                        <select
+                          className="h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                          value={assignments[dept.id] || ""}
+                          onChange={(e) => handleUpdateSPV(dept.id, e.target.value)}
+                        >
+                          <option value="">-- Plot SPV --</option>
+                          {supervisors.map(spv => (
+                            <option key={spv.id} value={spv.id}>{spv.full_name}</option>
+                          ))}
+                        </select>
+                      </TableCell>
                       <TableCell className="px-5 py-4">
-                        <button 
+                        <button
                           onClick={() => toggleDeptStatus(dept)}
                           className="focus:outline-none"
                         >
@@ -318,13 +317,13 @@ export default function ManageDepartments() {
                       </TableCell>
                       <TableCell className="px-5 py-4">
                         <Badge size="sm" color="primary">
-                           Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
+                          Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
                         </Badge>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-end">
                         <div className="flex justify-end gap-2">
-                           <button onClick={() => openEditModal(dept)} className="text-gray-500 hover:text-brand-500 transition-colors"><PencilIcon className="size-5" /></button>
-                           <button onClick={() => handleDeleteDepartment(dept.id, dept.name)} className="text-gray-500 hover:text-error-500 transition-colors"><TrashBinIcon className="size-5" /></button>
+                          <button onClick={() => openEditModal(dept)} className="text-gray-500 hover:text-brand-500 transition-colors"><PencilIcon className="size-5" /></button>
+                          <button onClick={() => handleDeleteDepartment(dept.id, dept.name)} className="text-gray-500 hover:text-error-500 transition-colors"><TrashBinIcon className="size-5" /></button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -374,28 +373,14 @@ export default function ManageDepartments() {
             />
           )}
 
-           <InputField
-             label="Kode Unit (Singkatan)"
-             placeholder="Contoh: B01, NVL, MNB"
-             value={newDept.code}
-             onChange={(e) => setNewDept({ ...newDept, code: e.target.value })}
-             required
-           />
-           <div>
-             <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-400">
-               Supervisor Penanggung Jawab
-             </label>
-             <select 
-               className="h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-               value={newDept.supervisor_id}
-               onChange={(e) => setNewDept({ ...newDept, supervisor_id: e.target.value })}
-             >
-               <option value="">-- Pilih Supervisor --</option>
-               {supervisors.map(spv => (
-                 <option key={spv.id} value={spv.id}>{spv.full_name}</option>
-               ))}
-             </select>
-           </div>
+          <InputField
+            label="Kode Departement"
+            placeholder="Contoh: B01, NVL, MNB"
+            value={newDept.code}
+            onChange={(e) => setNewDept({ ...newDept, code: e.target.value })}
+            required
+          />
+
           <div className="flex justify-end gap-3 mt-6">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
             <Button type="submit">Simpan</Button>
@@ -413,12 +398,12 @@ export default function ManageDepartments() {
             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
             required
           />
-           <InputField
-             label="Kode Departemen"
-             value={editForm.code}
-             onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
-             required
-           />
+          <InputField
+            label="Kode Departemen"
+            value={editForm.code}
+            onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+            required
+          />
           <div className="flex justify-end gap-3 mt-6">
             <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
             <Button type="submit">Simpan Perubahan</Button>

@@ -33,19 +33,43 @@ export default function ManageSA() {
       const currentMonth = new Date().getMonth() + 1;
       const currentYear = new Date().getFullYear();
 
-      // Get SAs assigned to THIS SPV for CURRENT month
+      // Sumber 1: SA yang di-plot langsung via monthly_assignments.sa_id ke SPV ini
       const { data: assignments } = await supabase
         .from("monthly_assignments")
-        .select("sa_id, users!monthly_assignments_sa_id_fkey(*)")
+        .select("sa_id")
         .eq("supervisor_id", profile.id)
         .eq("month", currentMonth)
-        .eq("year", currentYear);
-      
-      const saList = (assignments || [])
-        .filter(a => a.sa_id)
-        .map(a => (a.users as any));
+        .eq("year", currentYear)
+        .not("sa_id", "is", null);
 
-      setSas(saList || []);
+      const saIdsFromAssignments = (assignments || []).map(a => a.sa_id).filter(Boolean);
+
+      // Sumber 2: SA yang supervisor_id-nya adalah SPV ini (relasi langsung)
+      const { data: directSAs } = await supabase
+        .from("users")
+        .select("id, full_name, email, role, is_approved, is_active")
+        .eq("supervisor_id", profile.id)
+        .eq("role", "store_associate")
+        .eq("is_active", true);
+
+      const directSAIds = (directSAs || []).map(sa => sa.id);
+
+      // Gabungkan semua SA ID yang unik dari kedua sumber
+      const allSAIds = [...new Set([...saIdsFromAssignments, ...directSAIds])];
+
+      if (allSAIds.length === 0) {
+        setSas([]);
+        return;
+      }
+
+      // Fetch detail user untuk semua SA yang ditemukan
+      const { data: saDetails } = await supabase
+        .from("users")
+        .select("id, full_name, email, role, is_approved, is_active")
+        .in("id", allSAIds)
+        .eq("is_active", true);
+
+      setSas(saDetails || []);
     } catch (error) {
       console.error("Error fetching SA list:", error);
     } finally {

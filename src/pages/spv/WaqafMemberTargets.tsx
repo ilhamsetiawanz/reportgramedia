@@ -39,24 +39,41 @@ export default function WaqafMemberTargets() {
     try {
       if (!profile) return;
 
-      // 1. Fetch SAs assigned to THIS SPV for the SELECTED month/year
-      const { data: assignments, error: saError } = await supabase
+      // Sumber A: SA dengan supervisor_id langsung ke SPV ini
+      const { data: directSAs } = await supabase
+        .from("users")
+        .select("id, full_name")
+        .eq("supervisor_id", profile.id)
+        .eq("role", "store_associate")
+        .eq("is_approved", true)
+        .eq("is_active", true);
+
+      // Sumber B: SA yang di-plot via monthly_assignments.sa_id ke SPV ini bulan ini
+      const { data: assignments } = await supabase
         .from("monthly_assignments")
-        .select("sa_id, users!monthly_assignments_sa_id_fkey(id, full_name)")
+        .select("sa_id")
         .eq("supervisor_id", profile.id)
         .eq("month", month)
-        .eq("year", year);
+        .eq("year", year)
+        .not("sa_id", "is", null);
 
-      if (saError) throw saError;
+      const saIdsFromAssign = (assignments || []).map(a => a.sa_id).filter(Boolean);
+      let extraSAs: { id: string; full_name: string }[] = [];
+      if (saIdsFromAssign.length > 0) {
+        const { data: assignedSAs } = await supabase
+          .from("users")
+          .select("id, full_name")
+          .in("id", saIdsFromAssign)
+          .eq("is_approved", true)
+          .eq("is_active", true);
+        extraSAs = assignedSAs || [];
+      }
 
-      const sas = (assignments || [])
-        .filter(a => a.sa_id)
-        .map(a => ({
-          id: (a.users as any).id,
-          full_name: (a.users as any).full_name
-        }));
+      // Gabungkan dan deduplikasi
+      const allSAs = [...(directSAs || []), ...extraSAs];
+      const sas = Array.from(new Map(allSAs.map(s => [s.id, s])).values());
 
-      // 2. Fetch existing targets for the selected month/year
+      // Fetch existing targets for the selected month/year
       const { data: existingTargets, error: targetError } = await supabase
         .from("waqaf_member_targets")
         .select("*")
@@ -65,7 +82,7 @@ export default function WaqafMemberTargets() {
 
       if (targetError) throw targetError;
 
-      // 3. Map targets to SAs
+      // Map targets to SAs
       const mappedTargets: SATarget[] = sas.map(sa => {
         const target = existingTargets?.find(t => t.sa_id === sa.id);
         return {

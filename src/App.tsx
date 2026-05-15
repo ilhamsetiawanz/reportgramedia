@@ -34,6 +34,7 @@ import EventParticipantReport from "./pages/reports/EventParticipantReport";
 import CounterEventRegistration from "./pages/counter/CounterEventRegistration";
 import ManageCounters from "./pages/sm/ManageCounters";
 import CounterWeeklyRevenue from "./pages/counter/CounterWeeklyRevenue";
+import CounterTargetsSPV from "./pages/spv/CounterTargetsSPV";
 
 
 /**
@@ -72,6 +73,10 @@ const ProtectedRoute = ({ children, requireApproval = true, allowedRoles }: { ch
 
   return <>{children}</>;
 };
+
+import CounterWeeklyRecap from "./pages/reports/CounterWeeklyRecap";
+
+import CounterReport from "./pages/counter/CounterReport";
 
 export default function App() {
   const setSession = useAuthStore((state) => state.setSession);
@@ -121,7 +126,7 @@ export default function App() {
           <Route path="/sm/departments" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageDepartments /></ProtectedRoute>} />
           <Route path="/sm/targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageDepartments /></ProtectedRoute>} />
           <Route path="/sm/events" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageEvents /></ProtectedRoute>} />
-          <Route path="/sm/event-targets" element={<ProtectedRoute allowedRoles={["store_manager"]}><EventTargets /></ProtectedRoute>} />
+          <Route path="/sm/event-targets" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><EventTargets /></ProtectedRoute>} />
           <Route path="/sm/counters" element={<ProtectedRoute allowedRoles={["store_manager"]}><ManageCounters /></ProtectedRoute>} />
 
           {/* SPV Routes */}
@@ -130,6 +135,7 @@ export default function App() {
           <Route path="/spv/verify" element={<ProtectedRoute allowedRoles={["supervisor"]}><VerifyRevenue /></ProtectedRoute>} />
           <Route path="/spv/input-revenue" element={<ProtectedRoute allowedRoles={["supervisor"]}><SARevenueInput /></ProtectedRoute>} />
           <Route path="/spv/targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><MonthlyTargetsSPV /></ProtectedRoute>} />
+          <Route path="/spv/counter-targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><CounterTargetsSPV /></ProtectedRoute>} />
           <Route path="/spv/waqaf-targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><WaqafMemberTargets /></ProtectedRoute>} />
           <Route path="/spv/event-targets" element={<ProtectedRoute allowedRoles={["supervisor"]}><EventTargets /></ProtectedRoute>} />
 
@@ -141,7 +147,8 @@ export default function App() {
 
           {/* Counter Routes */}
           <Route path="/counter/event-registration" element={<ProtectedRoute allowedRoles={["counter"]}><CounterEventRegistration /></ProtectedRoute>} />
-          <Route path="/counter/weekly-revenue" element={<ProtectedRoute allowedRoles={["counter"]}><CounterWeeklyRevenue /></ProtectedRoute>} />
+          <Route path="/counter/revenue" element={<ProtectedRoute allowedRoles={["counter"]}><CounterWeeklyRevenue /></ProtectedRoute>} />
+          <Route path="/counter/report" element={<ProtectedRoute allowedRoles={["counter"]}><CounterReport /></ProtectedRoute>} />
 
           {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
           <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager"]}><DailyReport /></ProtectedRoute>} />
@@ -151,6 +158,7 @@ export default function App() {
           <Route path="/reports/dept" element={<ProtectedRoute allowedRoles={["supervisor"]}><MonthlyReport /></ProtectedRoute>} />
           <Route path="/reports/activities" element={<ProtectedRoute allowedRoles={["supervisor"]}><ActivityReport /></ProtectedRoute>} />
           <Route path="/reports/event-participants" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><EventParticipantReport /></ProtectedRoute>} />
+          <Route path="/reports/counter-weekly" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "counter"]}><CounterWeeklyRecap /></ProtectedRoute>} />
 
           <Route path="/blank" element={<Blank />} />
         </Route>

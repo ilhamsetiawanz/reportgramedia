@@ -150,20 +150,20 @@ export default function DailyRecap() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <div className="max-w-full overflow-x-auto shadow-sm">
-            <table className="w-full text-left border-collapse border-spacing-0">
-              <thead>
+          <div className="max-w-full overflow-x-auto shadow-sm max-h-[700px] overflow-y-auto">
+            <table className="w-full text-left border-separate border-spacing-0">
+              <thead className="sticky top-0 z-30">
                 <tr className="bg-[#2B56B3] text-white">
-                  <th colSpan={depts.length + 3} className="px-5 py-3 text-center text-sm font-bold uppercase tracking-widest border-b border-white/10">
-                    Omset Harian
+                  <th colSpan={depts.length + 3} className="px-5 py-2 text-center text-[11px] font-bold uppercase tracking-widest border-b border-white/10">
+                    Matriks Omset Harian (Approved)
                   </th>
                 </tr>
-                <tr className="bg-brand-500 text-white">
-                  <th className="px-3 py-3 text-xs font-bold text-center border-r border-white/20 w-12 sticky left-0 z-20 bg-brand-500">Tgl</th>
-                  <th className="px-4 py-3 text-xs font-bold border-r border-white/20 w-24 sticky left-[48px] z-20 bg-brand-500">Hari</th>
-                  <th className="px-5 py-3 text-xs font-bold text-center border-r border-white/20 min-w-[140px] sticky left-[144px] z-20 bg-brand-500">Omset Total</th>
+                <tr className="bg-brand-500 text-white shadow-sm">
+                  <th className="px-3 py-3 text-[10px] font-bold text-center border-r border-white/20 w-[50px] min-w-[50px] sticky left-0 z-40 bg-brand-500 border-b border-white/10">Tgl</th>
+                  <th className="px-4 py-3 text-[10px] font-bold border-r border-white/20 w-[90px] min-w-[90px] sticky left-[50px] z-40 bg-brand-500 border-b border-white/10">Hari</th>
+                  <th className="px-5 py-3 text-[10px] font-bold text-center border-r-2 border-brand-700 w-[140px] min-w-[140px] sticky left-[140px] z-40 bg-brand-500 border-b border-white/10 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">Omset Total</th>
                   {depts.map((d) => (
-                    <th key={d.id} className="px-5 py-3 text-xs font-bold text-center border-r border-white/20 min-w-[140px]">
+                    <th key={d.id} className="px-5 py-3 text-[10px] font-bold text-center border-r border-white/20 min-w-[120px] border-b border-white/10 whitespace-nowrap uppercase">
                       {d.name.replace("DEP ", "")}
                     </th>
                   ))}
@@ -171,23 +171,23 @@ export default function DailyRecap() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {isLoading ? (
-                  <tr><td colSpan={depts.length + 3} className="py-20 text-center text-gray-400 italic">Menyusun matriks data...</td></tr>
+                  <tr><td colSpan={depts.length + 3} className="py-20 text-center text-gray-400 italic text-xs">Menyusun matriks data...</td></tr>
                 ) : matrix.length === 0 ? (
-                  <tr><td colSpan={depts.length + 3} className="py-20 text-center text-gray-400 font-medium">Data tidak ditemukan untuk periode ini.</td></tr>
+                  <tr><td colSpan={depts.length + 3} className="py-20 text-center text-gray-400 font-medium text-xs">Data tidak ditemukan untuk periode ini.</td></tr>
                 ) : (
                   matrix.map((row) => (
                     <tr key={row.day} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-3 py-2 text-xs text-center border-r border-gray-200 dark:border-white/5 sticky left-0 z-10 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02]">
+                      <td className="px-3 py-2 text-[11px] text-center border-r border-gray-100 dark:border-white/5 sticky left-0 z-20 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02] border-b dark:border-white/5">
                         {row.day}
                       </td>
-                      <td className="px-4 py-2 text-xs border-r border-gray-200 dark:border-white/5 sticky left-[48px] z-10 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02]">
+                      <td className="px-4 py-2 text-[11px] border-r border-gray-100 dark:border-white/5 sticky left-[50px] z-20 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02] border-b dark:border-white/5">
                         {row.dayName}
                       </td>
-                      <td className="px-5 py-2 text-xs font-bold text-gray-900 dark:text-white border-r border-gray-200 dark:border-white/5 text-right sticky left-[144px] z-10 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02]">
+                      <td className="px-5 py-2 text-[11px] font-bold text-gray-900 dark:text-white border-r-2 border-gray-200 dark:border-white/10 text-right sticky left-[140px] z-20 bg-white dark:bg-gray-900 group-hover:bg-gray-50 dark:group-hover:bg-white/[0.02] shadow-[2px_0_5px_rgba(0,0,0,0.03)] border-b dark:border-white/5">
                         {formatIDR(row.total)}
                       </td>
                       {depts.map((d) => (
-                        <td key={d.id} className="px-5 py-2 text-xs text-right border-r border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-400">
+                        <td key={d.id} className="px-5 py-2 text-[11px] text-right border-r border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400 whitespace-nowrap border-b dark:border-white/5">
                           {formatIDR(row.deptValues[d.id] || 0)}
                         </td>
                       ))}

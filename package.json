@@ -20,7 +20,7 @@
     "react": "^19.0.0",
     "react-apexcharts": "^1.7.0",
     "react-dom": "^19.0.0",
-    "react-helmet-async": "^2.0.5",
+    "react-helmet-async": "^3.0.0",
     "react-router": "^7.1.5",
     "recharts": "^2.15.0",
     "tailwind-merge": "^3.0.1",

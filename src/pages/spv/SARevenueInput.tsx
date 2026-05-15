@@ -47,33 +47,34 @@ export default function SARevenueInput() {
   });
 
   useEffect(() => {
-    if (profile?.id) {
+    if (profile?.id && formData.date) {
       fetchMySA();
       fetchHistory();
     }
-  }, [profile]);
+  }, [profile, formData.date]);
 
   useEffect(() => {
-    if (formData.sa_id) {
+    if (formData.sa_id && formData.date) {
       fetchSADepartments(formData.sa_id);
     } else {
       setDeptList([]);
       setFormData(prev => ({ ...prev, department_id: "" }));
     }
-  }, [formData.sa_id]);
+  }, [formData.sa_id, formData.date]);
 
   async function fetchMySA() {
     try {
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
+      const d = new Date(formData.date);
+      const selMonth = d.getMonth() + 1;
+      const selYear = d.getFullYear();
 
-      // Get SAs assigned to THIS SPV for CURRENT month
+      // Get SAs assigned to THIS SPV for SELECTED month
       const { data: assignments, error } = await supabase
         .from("monthly_assignments")
         .select("sa_id, users!monthly_assignments_sa_id_fkey(id, full_name)")
         .eq("supervisor_id", profile?.id)
-        .eq("month", currentMonth)
-        .eq("year", currentYear);
+        .eq("month", selMonth)
+        .eq("year", selYear);
       
       if (error) throw error;
 
@@ -98,16 +99,17 @@ export default function SARevenueInput() {
 
   async function fetchSADepartments(saId: string) {
     try {
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
+      const d = new Date(formData.date);
+      const selMonth = d.getMonth() + 1;
+      const selYear = d.getFullYear();
 
       const { data, error } = await supabase
         .from("monthly_assignments")
         .select("department_id, departments(id, name)")
         .eq("sa_id", saId)
-        .eq("supervisor_id", profile?.id) // Extra safety
-        .eq("month", currentMonth)
-        .eq("year", currentYear);
+        .eq("supervisor_id", profile?.id)
+        .eq("month", selMonth)
+        .eq("year", selYear);
       
       if (error) throw error;
 

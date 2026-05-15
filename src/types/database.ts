@@ -1,4 +1,4 @@
-export type UserRole = "store_manager" | "supervisor" | "store_associate";
+export type UserRole = "store_manager" | "supervisor" | "store_associate" | "counter";
 
 export interface UserProfile {
   id: string;
@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string | null;
   role: UserRole;
   supervisor_id: string | null;
+  counter_id: string | null;
   is_approved: boolean;
   is_active: boolean;
   created_at: string;

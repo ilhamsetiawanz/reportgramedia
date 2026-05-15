@@ -34,40 +34,59 @@ export default function AssignSA() {
   async function fetchData() {
     setIsLoading(true);
     try {
-      // 1. Fetch departments assigned to this SPV for selected month
-      const { data: assignData, error: deptError } = await supabase
+      // 1. Fetch assignments for this SPV and selected period
+      const { data: assignData, error: assignError } = await supabase
         .from("monthly_assignments")
-        .select(`
-          department_id,
-          supervisor_id,
-          sa_id,
-          departments (id, name, code)
-        `)
+        .select("department_id, sa_id")
         .eq("supervisor_id", profile?.id)
         .eq("year", selectedYear)
         .eq("month", selectedMonth);
-      
-      if (deptError) throw deptError;
 
-      const mappedDepts: Department[] = (assignData || []).map(a => ({
-          id: a.department_id,
-          name: (a.departments as any)?.name || "Unknown",
-          code: (a.departments as any)?.code || "??",
-          assigned_sa_id: a.sa_id
-      }));
+      if (assignError) throw assignError;
 
-      // 2. Fetch SAs under this SPV
-      const { data: saData, error: saError } = await supabase
-        .from("users")
-        .select("id, full_name")
+      // 2. Get department details for those assigned to this SPV
+      const assignedDeptIds = (assignData || []).map(a => a.department_id).filter(Boolean);
+      const assignMap: Record<string, string> = {};
+      assignData?.forEach(a => { if (a.department_id) assignMap[a.department_id] = a.sa_id; });
+
+      let mappedDepts: Department[] = [];
+      if (assignedDeptIds.length > 0) {
+        const { data: deptData } = await supabase
+          .from("departments")
+          .select("id, name, code")
+          .in("id", assignedDeptIds)
+          .eq("is_active", true);
+        mappedDepts = (deptData || []).map(d => ({
+          id: d.id, name: d.name, code: d.code,
+          assigned_sa_id: assignMap[d.id] || null
+        }));
+      }
+
+      // 3. Fetch SAs — gabungkan dari 2 sumber:
+      // Sumber A: SA dengan supervisor_id = SPV ini
+      const { data: directSAs } = await supabase
+        .from("users").select("id, full_name")
         .eq("supervisor_id", profile?.id)
         .eq("role", "store_associate")
-        .eq("is_approved", true);
-      
-      if (saError) throw saError;
+        .eq("is_approved", true).eq("is_active", true);
+
+      // Sumber B: SA yang di-plot via monthly_assignments.sa_id bulan ini
+      const saIdsFromAssign = (assignData || []).map(a => a.sa_id).filter(Boolean);
+      let extraSAs: SA[] = [];
+      if (saIdsFromAssign.length > 0) {
+        const { data: assignedSAs } = await supabase
+          .from("users").select("id, full_name")
+          .in("id", saIdsFromAssign)
+          .eq("is_approved", true).eq("is_active", true);
+        extraSAs = assignedSAs || [];
+      }
+
+      // Gabungkan dan hapus duplikat
+      const allSAs = [...(directSAs || []), ...extraSAs];
+      const uniqueSAs = Array.from(new Map(allSAs.map(s => [s.id, s])).values());
 
       setDepts(mappedDepts);
-      setSas(saData || []);
+      setSas(uniqueSAs);
     } catch (error) {
       console.error("Error fetching assignment data:", error);
     } finally {
@@ -79,13 +98,16 @@ export default function AssignSA() {
     try {
       const { error } = await supabase
         .from("monthly_assignments")
-        .update({ sa_id: saId || null })
-        .eq("department_id", deptId)
-        .eq("year", selectedYear)
-        .eq("month", selectedMonth);
-      
+        .upsert({
+          department_id: deptId,
+          supervisor_id: profile?.id,
+          sa_id: saId || null,
+          month: selectedMonth,
+          year: selectedYear
+        }, { onConflict: "department_id,month,year" });
+
       if (error) throw error;
-      
+
       // Update local state
       setDepts(prev => prev.map(d => d.id === deptId ? { ...d, assigned_sa_id: saId } : d));
     } catch (error) {

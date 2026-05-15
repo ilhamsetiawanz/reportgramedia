@@ -120,13 +120,11 @@ export default function DailyReport() {
       let targetDeptIds = [item.department_id];
       let deptLabel = item.departments?.name;
 
-      const targetSAId = item.sa_id;
-      
       if (isSA) {
         const { data: assignments } = await supabase
           .from('monthly_assignments')
           .select('department_id')
-          .eq('sa_id', targetSAId)
+          .eq('sa_id', item.sa_id)
           .eq('month', currentMonthVal)
           .eq('year', currentYearVal);
         
@@ -137,17 +135,17 @@ export default function DailyReport() {
       }
       
       const [monthlyRevRes, monthlyWMRes, targetRes, dailyWMRes] = await Promise.all([
-        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', targetSAId).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
-        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', targetSAId).gte('date', startOfMonth).lte('date', date),
+        supabase.from('daily_revenue').select('amount').in('department_id', targetDeptIds).eq('sa_id', profile?.id).eq('status', 'approved').gte('date', startOfMonth).lte('date', date),
+        supabase.from('waqaf_member_entries').select('waqaf_amount, member_count').eq('sa_id', profile?.id).gte('date', startOfMonth).lte('date', date),
         supabase.from('monthly_targets').select('target_amount, last_year_amount').in('department_id', targetDeptIds).eq('month', currentMonthVal).eq('year', currentYearVal),
-        supabase.from('waqaf_member_entries').select('*').eq('sa_id', targetSAId).eq('date', date).maybeSingle()
+        supabase.from('waqaf_member_entries').select('*').eq('sa_id', profile?.id).eq('date', date).single()
       ]);
 
       const dailyRevToday = await supabase
         .from('daily_revenue')
         .select('amount')
         .in('department_id', targetDeptIds)
-        .eq('sa_id', targetSAId)
+        .eq('sa_id', profile?.id)
         .eq('date', date)
         .eq('status', 'approved');
 
@@ -166,27 +164,28 @@ export default function DailyReport() {
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
 
       const message = `*Report Harian, ${formattedDate}*
-Nama : ${profile?.full_name}
+Nama : ${profile?.full_name || item.users?.full_name}
 My Value : ${dailyWMRes.data?.member_count || 0}
-Waqaf : ${dailyWMRes.data?.waqaf_amount > 0 ? 'Rp ' + dailyWMRes.data.waqaf_amount.toLocaleString() : '-'}
+Waqaf : ${dailyWMRes.data?.waqaf_amount > 0 ? 'Rp ' + dailyWMRes.data.waqaf_amount.toLocaleString('id-ID') : '-'}
 
 *Akumulasi 1 - ${new Date(date).getDate()} ${currentMonthName} ${new Date(date).getFullYear()}*
 My Value : ${accMember}
-Wakaf : Rp ${accWaqaf.toLocaleString()}
+Wakaf : Rp ${accWaqaf.toLocaleString('id-ID')}
 
 Departement : *${deptLabel}*
-Sales : Rp ${dailySales.toLocaleString()}
-Target : Rp ${targetAmt.toLocaleString()}
+Sales : Rp ${dailySales.toLocaleString('id-ID')}
+Target : Rp ${targetAmt.toLocaleString('id-ID')}
 Achiv : ${achPerc.toFixed(1)}%
 Growth : ${growthPerc.toFixed(1)}%
 
 Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
 
       const encodedMessage = encodeURIComponent(message);
-      window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+      // Use api.whatsapp.com for better compatibility
+      window.open(`https://api.whatsapp.com/send?text=${encodedMessage}`, '_blank');
     } catch (error) {
        console.error("Error generating WA message:", error);
-       alert("Gagal membuat laporan WA. Pastikan data target sudah diinput.");
+       alert("Gagal membuat laporan WA. Pastikan data target sudah diinput atau periksa koneksi Anda.");
     }
   }
 

@@ -6,8 +6,7 @@ import { useAuthStore } from "../../store/useAuthStore";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 
 interface MonthlyData {
@@ -220,49 +219,96 @@ export default function MonthlyReport() {
         </div>
 
         {/* Charts Section */}
+        {/* Charts Section */}
         {!isLoading && data.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-8">
+            {/* Chart 1: YoY Growth Comparison */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <h3 className="text-lg font-bold mb-6 dark:text-white">Pertumbuhan Per Departemen (YoY)</h3>
-              <div className="h-[300px] w-full">
+              <h3 className="text-lg font-bold mb-6 dark:text-white flex items-center justify-between">
+                <span>Perbandingan Omset YoY per Departemen</span>
+                <span className="text-xs font-normal text-gray-500">Mencakup {data.length} Departemen</span>
+              </h3>
+              <div className="h-[450px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.map(d => ({ name: d.dept_name, current: d.actual, previous: d.last_year }))}>
+                  <BarChart 
+                    data={data.map(d => ({ 
+                      name: d.dept_name.replace("DEP ", ""), 
+                      current: d.actual, 
+                      previous: d.last_year 
+                    }))}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="name" hide />
-                    <YAxis hide />
-                    <Tooltip 
-                      formatter={(val: number) => `Rp ${val.toLocaleString()}`}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      interval={0} 
+                      tick={{ fontSize: 9, fill: '#64748B' }} 
+                      height={80}
                     />
-                    <Legend />
-                    <Bar name={`Tahun ${year-1}`} dataKey="previous" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                    <Bar name={`Tahun ${year}`} dataKey="current" fill="#3C50E0" radius={[4, 4, 0, 0]} />
+                    <YAxis 
+                      tick={{ fontSize: 10, fill: '#64748B' }} 
+                      tickFormatter={(val) => `Rp ${(val / 1000000).toFixed(0)}jt`}
+                    />
+                    <Tooltip 
+                      formatter={(val: number) => `Rp ${val.toLocaleString('id-ID')}`}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
+                    />
+                    <Legend verticalAlign="top" height={36}/>
+                    <Bar name={`Tahun ${year-1}`} dataKey="previous" fill="#CBD5E1" radius={[4, 4, 0, 0]} barSize={12} />
+                    <Bar name={`Tahun ${year}`} dataKey="current" fill="#3C50E0" radius={[4, 4, 0, 0]} barSize={12} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
+            {/* Chart 2: Market Share (Horizontal Bar for better readability) */}
             <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <h3 className="text-lg font-bold mb-6 dark:text-white">Share Toko Per Departemen (%)</h3>
-              <div className="h-[300px] w-full">
+              <h3 className="text-lg font-bold mb-6 dark:text-white">Kontribusi Omset Toko (%)</h3>
+              <div className="h-[500px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data.filter(d => d.actual > 0).map(d => ({ name: d.dept_name, value: d.actual }))}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {data.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(val: number) => `Rp ${val.toLocaleString()}`} />
-                    <Legend layout="vertical" align="right" verticalAlign="middle" />
-                  </PieChart>
+                  <BarChart 
+                    layout="vertical" 
+                    data={data
+                      .filter(d => d.actual > 0)
+                      .map(d => ({ 
+                        name: d.dept_name.replace("DEP ", ""), 
+                        value: d.actual,
+                        share: (d.actual / totals.actual) * 100
+                      }))
+                      .sort((a, b) => b.value - a.value)
+                    }
+                    margin={{ left: 40, right: 60 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={140} 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fill: '#64748B' }} 
+                    />
+                    <Tooltip 
+                      formatter={(val: any, name: any) => name === 'share' ? [`${val.toFixed(1)}%`, 'Share'] : [`Rp ${val.toLocaleString('id-ID')}`, 'Omset']}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
+                    />
+                    <Bar 
+                      dataKey="value" 
+                      fill="#10B981" 
+                      radius={[0, 4, 4, 0]} 
+                      barSize={15}
+                      label={{ 
+                        position: 'right', 
+                        formatter: (val: any) => `${((val / totals.actual) * 100).toFixed(1)}%`,
+                        fontSize: 10,
+                        fill: '#64748B',
+                        fontWeight: 'bold'
+                      }} 
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -346,4 +392,3 @@ export default function MonthlyReport() {
   );
 }
 
-const CHART_COLORS = ['#3C50E0', '#10B981', '#FFB819', '#FF4D4D', '#8B5CF6', '#22D3EE', '#F472B6'];

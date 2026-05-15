@@ -2,473 +2,170 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import PageMeta from "../../components/common/PageMeta";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "../../components/ui/table";
-import Button from "../../components/ui/button/Button";
-import { useAuthStore } from "../../store/useAuthStore";
 import { Modal } from "../../components/ui/modal";
 import InputField from "../../components/form/input/InputField";
+import Button from "../../components/ui/button/Button";
+import { PlusIcon } from "../../icons";
+import Badge from "../../components/ui/badge/Badge";
 
 interface Event {
   id: string;
   name: string;
 }
 
-interface SATarget {
-  id?: string;
-  sa_id: string;
+interface User {
+  id: string;
   full_name: string;
-  target_count: number;
-  target_type: "participants" | "revenue";
+  role: string;
 }
 
-interface CounterTarget {
-  id?: string;
-  counter_name: string;
+interface EventTarget {
+  id: string;
+  event_id: string;
+  sa_id: string;
   target_count: number;
-  target_type: "participants" | "revenue";
+  target_type: 'peserta' | 'nominal';
+  target_amount: number;
 }
 
 export default function EventTargets() {
-  const { profile } = useAuthStore();
   const [events, setEvents] = useState<Event[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [targets, setTargets] = useState<EventTarget[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"SA" | "Counter">("SA");
+  const [isLoading, setIsLoading] = useState(true);
   
-  const [targets, setTargets] = useState<SATarget[]>([]);
-  const [counterTargets, setCounterTargets] = useState<CounterTarget[]>([]);
-  const [availableBrands, setAvailableBrands] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // SA Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSA, setEditingSA] = useState<SATarget | null>(null);
-  const [targetInput, setTargetInput] = useState(0);
-  const [targetTypeInput, setTargetTypeInput] = useState<"participants" | "revenue">("participants");
-
-  // Counter Modal State
-  const [isCounterModalOpen, setIsCounterModalOpen] = useState(false);
-  const [editingCounter, setEditingCounter] = useState<CounterTarget | null>(null);
-  const [counterNameInput, setCounterNameInput] = useState("");
+  const [targetTypeInput, setTargetTypeInput] = useState<'peserta' | 'nominal'>('peserta');
+  const [formData, setFormData] = useState({
+    sa_id: "",
+    value: ""
+  });
 
   useEffect(() => {
-    fetchEvents();
+    fetchInitialData();
   }, []);
 
   useEffect(() => {
-    if (selectedEventId) {
-      if (activeTab === "SA") {
-        fetchSAsAndTargets();
-      } else {
-        fetchCounterTargets();
-      }
-    } else {
-      setTargets([]);
-      setCounterTargets([]);
-    }
-  }, [selectedEventId, profile, activeTab]);
+    if (selectedEventId) fetchTargets();
+  }, [selectedEventId]);
 
-  async function fetchEvents() {
-    const { data } = await supabase
-      .from("events")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("created_at", { ascending: false });
-    
-    setEvents(data || []);
-    if (data && data.length > 0) {
-      setSelectedEventId(data[0].id);
-    }
+  async function fetchInitialData() {
+    const { data: evData } = await supabase.from("events").select("id, name").eq("is_active", true);
+    setEvents(evData || []);
+    if (evData && evData.length > 0) setSelectedEventId(evData[0].id);
+
+    const { data: userData } = await supabase.from("users").select("id, full_name, role").in("role", ["store_associate", "counter"]).eq("is_approved", true);
+    setUsers(userData || []);
+    setIsLoading(false);
   }
 
-  async function fetchSAsAndTargets() {
-    if (!profile || !selectedEventId) return;
-    setIsLoading(true);
-    try {
-      let sas: { id: string, full_name: string }[] = [];
-
-      if (profile.role === "store_manager") {
-        const { data: userData } = await supabase
-          .from("users")
-          .select("id, full_name")
-          .eq("role", "store_associate")
-          .eq("is_approved", true)
-          .eq("is_active", true);
-        sas = userData || [];
-      } else {
-        const now = new Date();
-        const { data: assignments } = await supabase
-          .from("monthly_assignments")
-          .select("sa_id, users!monthly_assignments_sa_id_fkey(id, full_name)")
-          .eq("supervisor_id", profile.id)
-          .eq("month", now.getMonth() + 1)
-          .eq("year", now.getFullYear());
-        
-        sas = (assignments || [])
-          .filter(a => a.sa_id)
-          .map(a => ({
-            id: (a.users as any).id,
-            full_name: (a.users as any).full_name
-          }));
-      }
-
-      const { data: existingTargets } = await supabase
-        .from("event_targets")
-        .select("*")
-        .eq("event_id", selectedEventId);
-
-      const mappedTargets: SATarget[] = sas.map(sa => {
-        const target = existingTargets?.find(t => t.sa_id === sa.id);
-        return {
-          id: target?.id,
-          sa_id: sa.id,
-          full_name: sa.full_name,
-          target_count: target?.target_count || 0,
-          target_type: target?.target_type || "participants",
-        };
-      });
-
-      setTargets(mappedTargets);
-    } catch (error) {
-      console.error("Error fetching SA targets:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  async function fetchTargets() {
+    const { data } = await supabase.from("event_targets").select("*").eq("event_id", selectedEventId);
+    setTargets(data || []);
   }
 
-  async function fetchCounterTargets() {
-    if (!profile || !selectedEventId) return;
-    setIsLoading(true);
+  async function handleSave() {
     try {
-      const { data } = await supabase
-        .from("event_counter_targets")
-        .select("*")
-        .eq("event_id", selectedEventId)
-        .order("counter_name", { ascending: true });
-      
-      setCounterTargets(data || []);
-
-      // Fetch available brands for this user
-      let brandsQuery = supabase.from("counters").select("id, name");
-      if (profile?.role === 'supervisor') {
-        brandsQuery = brandsQuery.eq('supervisor_id', profile.id);
-      }
-      const { data: brandsData } = await brandsQuery;
-      setAvailableBrands(brandsData || []);
-    } catch (error) {
-      console.error("Error fetching counter targets:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  // --- SA Target Handlers ---
-  const openSetTargetModal = (target: SATarget) => {
-    setEditingSA(target);
-    setTargetInput(target.target_count);
-    setTargetTypeInput(target.target_type || "participants");
-    setIsModalOpen(true);
-  };
-
-  async function handleSaveTarget() {
-    if (!editingSA || !profile || !selectedEventId) return;
-    try {
-      const targetData = {
+      const payload = {
         event_id: selectedEventId,
-        sa_id: editingSA.sa_id,
-        supervisor_id: profile.id,
-        target_count: targetInput,
-        target_type: targetTypeInput
+        sa_id: formData.sa_id,
+        target_type: targetTypeInput,
+        target_count: targetTypeInput === 'peserta' ? parseInt(formData.value) : 0,
+        target_amount: targetTypeInput === 'nominal' ? parseFloat(formData.value) : 0
       };
-      
-      let result;
-      if (editingSA.id) {
-        result = await supabase.from("event_targets").update({ 
-          target_count: targetInput,
-          target_type: targetTypeInput
-        }).eq("id", editingSA.id);
-      } else {
-        result = await supabase.from("event_targets").insert(targetData);
-      }
-      
-      if (result.error) throw result.error;
-      setIsModalOpen(false);
-      fetchSAsAndTargets();
-    } catch (error) {
-      alert("Gagal menyimpan target: " + (error as any).message);
-    }
-  }
 
-  // --- Counter Target Handlers ---
-  const openCounterModal = (target: CounterTarget | null) => {
-    setEditingCounter(target);
-    if (target) {
-      setCounterNameInput(target.counter_name);
-      setTargetInput(target.target_count);
-      setTargetTypeInput(target.target_type || "participants");
-    } else {
-      setCounterNameInput("");
-      setTargetInput(0);
-      setTargetTypeInput("participants");
-    }
-    setIsCounterModalOpen(true);
-  };
-
-  async function handleSaveCounterTarget() {
-    if (!profile || !selectedEventId || !counterNameInput.trim()) {
-      alert("Nama Counter tidak boleh kosong!");
-      return;
-    }
-    
-    try {
-      const targetData = {
-        event_id: selectedEventId,
-        counter_name: counterNameInput.trim(),
-        target_count: targetInput,
-        target_type: targetTypeInput
-      };
-      
-      let result;
-      if (editingCounter && editingCounter.id) {
-        result = await supabase.from("event_counter_targets").update(targetData).eq("id", editingCounter.id);
-      } else {
-        result = await supabase.from("event_counter_targets").insert(targetData);
-      }
-      
-      if (result.error) throw result.error;
-      setIsCounterModalOpen(false);
-      fetchCounterTargets();
-    } catch (error) {
-      alert("Gagal menyimpan target counter: " + (error as any).message);
-    }
-  }
-
-  async function handleDeleteCounter(id: string, name: string) {
-    if (!confirm(`Hapus target untuk counter "${name}"?`)) return;
-    try {
-      const { error } = await supabase.from("event_counter_targets").delete().eq("id", id);
+      const { error } = await supabase.from("event_targets").upsert([payload], { onConflict: 'event_id, sa_id' });
       if (error) throw error;
-      fetchCounterTargets();
+      
+      setIsModalOpen(false);
+      fetchTargets();
     } catch (error) {
-      alert("Gagal hapus: " + (error as any).message);
+      alert("Gagal simpan: " + (error as any).message);
     }
   }
 
   return (
     <>
-      <PageMeta title="Target Event | Gramedia Tracker" description="Penentuan target peserta event per SA dan Counter" />
-
+      <PageMeta title="Set Target Event | Gramedia" description="Atur target peserta atau nominal untuk SA/Counter." />
+      
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Target Peserta Event</h1>
-            <p className="text-sm text-gray-500">Tetapkan target jumlah peserta untuk masing-masing SA atau Counter.</p>
+            <h1 className="text-xl font-black text-gray-900 dark:text-white uppercase">Set Target Event</h1>
+            <p className="text-[11px] text-gray-500 font-bold uppercase">Plotting target per event.</p>
           </div>
-
-          <div className="flex items-center gap-3">
-            <select
-              className="h-10 px-3 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none min-w-[200px]"
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-            >
-              <option value="">-- Pilih Event --</option>
-              {events.map(e => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
+          <div className="flex gap-3">
+             <select className="h-10 px-3 border border-gray-300 rounded-lg text-xs font-black uppercase outline-none" value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)}>
+               {events.map(ev => (<option key={ev.id} value={ev.id}>{ev.name}</option>))}
+             </select>
+             <Button size="sm" onClick={() => setIsModalOpen(true)} startIcon={<PlusIcon />}>Set Target</Button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-800">
-          <button
-            className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'SA' ? 'text-brand-500' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
-            onClick={() => setActiveTab('SA')}
-          >
-            Target Store Associate
-            {activeTab === 'SA' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-500"></span>}
-          </button>
-          <button
-            className={`px-6 py-3 font-medium text-sm transition-colors relative ${activeTab === 'Counter' ? 'text-brand-500' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
-            onClick={() => setActiveTab('Counter')}
-          >
-            Target Counter
-            {activeTab === 'Counter' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-brand-500"></span>}
-          </button>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-          {activeTab === "SA" ? (
-            <div className="max-w-full overflow-x-auto">
-              <Table>
-                <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
-                  <TableRow>
-                    <TableCell isHeader className="px-5 py-3 text-start text-theme-xs uppercase">Nama SA</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Aksi</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {!selectedEventId ? (
-                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400">Silakan pilih event terlebih dahulu.</TableCell>
+        <div className="rounded-xl border border-gray-200 bg-white dark:bg-white/[0.03] overflow-hidden">
+          <Table>
+            <TableHeader className="bg-gray-50/50 dark:bg-white/[0.02]">
+              <TableRow>
+                <TableCell isHeader className="px-5 py-3 text-[10px] font-black uppercase">Nama Staff</TableCell>
+                <TableCell isHeader className="px-5 py-3 text-[10px] font-black uppercase">Role</TableCell>
+                <TableCell isHeader className="px-5 py-3 text-[10px] font-black uppercase">Tipe Target</TableCell>
+                <TableCell isHeader className="px-5 py-3 text-end text-[10px] font-black uppercase">Nilai Target</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+              {isLoading ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-10 text-xs font-bold text-gray-400">Memuat data...</TableCell></TableRow>
+              ) : targets.length === 0 ? (
+                <TableRow><TableCell colSpan={4} className="text-center py-10 text-xs italic text-gray-400">Belum ada target diplot.</TableCell></TableRow>
+              ) : (
+                targets.map(t => {
+                  const user = users.find(u => u.id === t.sa_id);
+                  return (
+                    <TableRow key={t.id}>
+                      <TableCell className="px-5 py-3 text-xs font-bold text-gray-900 dark:text-white">{user?.full_name || "Unknown"}</TableCell>
+                      <TableCell className="px-5 py-3 text-[10px] font-bold text-gray-400 uppercase">{user?.role}</TableCell>
+                      <TableCell className="px-5 py-3">
+                        <Badge size="xs" color={t.target_type === 'nominal' ? 'success' : 'primary'}>{t.target_type === 'nominal' ? 'NOMINAL' : 'PESERTA'}</Badge>
+                      </TableCell>
+                      <TableCell className="px-5 py-3 text-end text-xs font-black text-gray-900">
+                        {t.target_type === 'nominal' ? `Rp ${t.target_amount?.toLocaleString()}` : `${t.target_count} Orang`}
+                      </TableCell>
                     </TableRow>
-                  ) : isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400">Memuat data target...</TableCell>
-                    </TableRow>
-                  ) : targets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400 font-medium italic">Belum ada SA yang sesuai.</TableCell>
-                    </TableRow>
-                  ) : (
-                    targets.map((item) => (
-                      <TableRow key={item.sa_id}>
-                        <TableCell className="px-5 py-4 font-bold text-gray-900 dark:text-white/90">
-                          {item.full_name}
-                        </TableCell>
-                        <TableCell className="px-5 py-4 text-end">
-                          <span className="text-brand-600 font-medium">
-                            {item.target_type === 'revenue' ? `Rp ${item.target_count.toLocaleString()}` : `${item.target_count} Peserta`}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-5 py-4 text-end">
-                          <Button size="sm" variant="outline" onClick={() => openSetTargetModal(item)}>Set Target</Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="max-w-full overflow-x-auto">
-              <div className="p-4 flex justify-end border-b border-gray-100 dark:border-white/[0.05]">
-                 <Button onClick={() => openCounterModal(null)} size="sm">Tambah Target Counter</Button>
-              </div>
-              <Table>
-                <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
-                  <TableRow>
-                    <TableCell isHeader className="px-5 py-3 text-start text-theme-xs uppercase">Nama Counter</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Target</TableCell>
-                    <TableCell isHeader className="px-5 py-3 text-end text-theme-xs uppercase">Aksi</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-                  {!selectedEventId ? (
-                     <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400">Silakan pilih event terlebih dahulu.</TableCell>
-                    </TableRow>
-                  ) : isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400">Memuat data target...</TableCell>
-                    </TableRow>
-                  ) : counterTargets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-10 text-gray-400 font-medium italic">Belum ada target Counter ditambahkan.</TableCell>
-                    </TableRow>
-                  ) : (
-                    counterTargets.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="px-5 py-4 font-bold text-gray-900 dark:text-white/90">
-                          {item.counter_name}
-                        </TableCell>
-                        <TableCell className="px-5 py-4 text-end">
-                          <span className="text-brand-600 font-medium">
-                            {item.target_type === 'revenue' ? `Rp ${item.target_count.toLocaleString()}` : `${item.target_count} Peserta`}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-5 py-4 text-end">
-                          <div className="flex justify-end gap-2">
-                             <Button size="sm" variant="outline" onClick={() => openCounterModal(item)}>Edit</Button>
-                             {item.id && <Button size="sm" variant="outline" className="text-error-500 border-error-500" onClick={() => handleDeleteCounter(item.id!, item.counter_name)}>Hapus</Button>}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-6">
-          <h2 className="text-xl font-bold mb-1 dark:text-white">Set Target Peserta SA</h2>
-          <p className="text-sm text-gray-500 mb-6">Staff: {editingSA?.full_name}</p>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Jenis Target</label>
-              <select
-                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                value={targetTypeInput}
-                onChange={(e) => setTargetTypeInput(e.target.value as any)}
-              >
-                <option value="participants">Jumlah Peserta</option>
-                <option value="revenue">Nominal Target (Rupiah)</option>
-              </select>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} className="max-w-[400px] w-full p-0 overflow-hidden">
+         <div className="p-5 border-b border-gray-100 dark:border-white/[0.05]">
+            <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase">Set Target Staff</h2>
+         </div>
+         <div className="p-5 space-y-4">
+            <div className="space-y-1">
+               <label className="text-[10px] font-black text-gray-500 uppercase">Pilih Staff (SA/Counter)</label>
+               <select className="w-full h-10 px-3 border border-gray-300 rounded-lg text-xs font-bold" value={formData.sa_id} onChange={(e) => setFormData({ ...formData, sa_id: e.target.value })}>
+                  <option value="">-- Pilih Staff --</option>
+                  {users.map(u => (<option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>))}
+               </select>
             </div>
-
-            <InputField
-              label={targetTypeInput === 'revenue' ? "Target Nominal (Rp)" : "Target Peserta (Orang)"}
-              type="number"
-              value={targetInput}
-              onChange={(e) => setTargetInput(parseInt(e.target.value) || 0)}
-            />
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
-              <Button onClick={handleSaveTarget}>Simpan Target</Button>
+            <div className="space-y-1">
+               <label className="text-[10px] font-black text-gray-500 uppercase">Tipe Target</label>
+               <div className="flex gap-2">
+                  <button onClick={() => setTargetTypeInput('peserta')} className={`flex-1 py-2 text-[10px] font-black rounded-lg border transition-all ${targetTypeInput === 'peserta' ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-500 border-gray-200'}`}>PESERTA</button>
+                  <button onClick={() => setTargetTypeInput('nominal')} className={`flex-1 py-2 text-[10px] font-black rounded-lg border transition-all ${targetTypeInput === 'nominal' ? 'bg-success-500 text-white border-success-500' : 'bg-white text-gray-500 border-gray-200'}`}>NOMINAL (RP)</button>
+               </div>
             </div>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal isOpen={isCounterModalOpen} onClose={() => setIsCounterModalOpen(false)}>
-        <div className="p-6">
-          <h2 className="text-xl font-bold mb-6 dark:text-white">{editingCounter ? "Edit" : "Tambah"} Target Counter</h2>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Pilih Brand Counter</label>
-              <select
-                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                value={counterNameInput}
-                onChange={(e) => setCounterNameInput(e.target.value)}
-              >
-                <option value="">Pilih Brand...</option>
-                {availableBrands.map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
-                ))}
-              </select>
-            </div>
+            <InputField label={targetTypeInput === 'peserta' ? "Jumlah Orang" : "Nominal (Rp)"} type="number" value={formData.value} onChange={(e) => setFormData({ ...formData, value: e.target.value })} />
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-400">Jenis Target</label>
-              <select
-                className="w-full h-11 px-4 text-sm border border-gray-300 rounded-lg focus:border-brand-500 outline-none dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                value={targetTypeInput}
-                onChange={(e) => setTargetTypeInput(e.target.value as any)}
-              >
-                <option value="participants">Jumlah Peserta</option>
-                <option value="revenue">Nominal Target (Rupiah)</option>
-              </select>
-            </div>
-
-            <InputField
-              label={targetTypeInput === 'revenue' ? "Target Nominal (Rp)" : "Target Peserta (Orang)"}
-              type="number"
-              value={targetInput}
-              onChange={(e) => setTargetInput(parseInt(e.target.value) || 0)}
-            />
-
             <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setIsCounterModalOpen(false)}>Batal</Button>
-              <Button onClick={handleSaveCounterTarget}>Simpan Target Counter</Button>
+               <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>Batal</Button>
+               <Button size="sm" onClick={handleSave} className="px-6 font-black uppercase">Simpan Target</Button>
             </div>
-          </div>
-        </div>
+         </div>
       </Modal>
     </>
   );

@@ -16,17 +16,18 @@ export default function AuthLayout({
           <div className="relative flex items-center justify-center z-1">
             {/* <!-- ===== Common Grid Shape Start ===== --> */}
             <GridShape />
-            <div className="flex flex-col items-center max-w-xs">
-              <Link to="/" className="block mb-4">
-                <img
-                  width={231}
-                  height={48}
-                  src="/images/logo/auth-logo.svg"
-                  alt="Logo"
-                />
+            <div className="flex flex-col items-center max-w-sm">
+              <Link to="/" className="block mb-6">
+                <div className="flex items-center gap-4">
+                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-brand-600 font-bold text-3xl shadow-xl">G</div>
+                   <div className="flex flex-col text-left">
+                      <span className="font-bold text-4xl text-white tracking-tight">Gramedia</span>
+                      <span className="text-sm text-brand-200 font-medium tracking-[4px] uppercase">Kendari</span>
+                   </div>
+                </div>
               </Link>
-              <p className="text-center text-gray-400 dark:text-white/60">
-                Free and Open-Source Tailwind CSS Admin Dashboard Template
+              <p className="text-center text-brand-100/60 text-lg font-medium">
+                Sistem Monitoring & Pelaporan Operasional Terpadu Gramedia Kendari.
               </p>
             </div>
           </div>

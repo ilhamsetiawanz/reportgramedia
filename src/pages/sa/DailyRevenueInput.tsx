@@ -39,32 +39,36 @@ export default function DailyRevenueInput() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile) {
+    if (profile && formData.date) {
       fetchDepartments();
       fetchHistory();
     }
-  }, [profile]);
+  }, [profile, formData.date]);
 
   async function fetchDepartments() {
     try {
-      if (profile?.id) {
-        // Fetch from monthly_assignments for the current month/year
-        const currentM = new Date().getMonth() + 1;
-        const currentY = new Date().getFullYear();
+      if (profile?.id && formData.date) {
+        const d = new Date(formData.date);
+        const selMonth = d.getMonth() + 1;
+        const selYear = d.getFullYear();
 
+        // 1. Fetch assignments for this SA for selected date
         const { data: assignData, error: assignError } = await supabase
           .from("monthly_assignments")
           .select("department_id, departments(id, name)")
           .eq("sa_id", profile.id)
-          .eq("month", currentM)
-          .eq("year", currentY);
+          .eq("month", selMonth)
+          .eq("year", selYear);
         
         if (assignError) throw assignError;
 
-        const deptList = (assignData || []).map(a => ({
-          id: a.department_id,
-          name: (a.departments as any)?.name || "Unknown"
-        }));
+        // 2. Map results ensuring we handle missing joins gracefully
+        const deptList = (assignData || [])
+          .filter(a => a.departments)
+          .map(a => ({
+            id: a.department_id,
+            name: (a.departments as any).name
+          }));
 
         setDepartments(deptList);
         if (deptList.length > 0) {
@@ -112,6 +116,7 @@ export default function DailyRevenueInput() {
             department_id: formData.department_id,
             amount: formData.amount,
             notes: formData.notes,
+            status: "pending", // Reset to pending for re-verification
           })
           .eq("id", editingId);
         
@@ -199,15 +204,13 @@ export default function DailyRevenueInput() {
           .eq('year', currentYearVal),
         // Data waqaf hari ini (milik SA ini)
         supabase.from('waqaf_member_entries')
-          .select('waqaf_amount, member_count')
+          .select('*')
           .eq('sa_id', profile?.id)
-          .eq('date', date),
+          .eq('date', date)
+          .maybeSingle(),
       ]);
 
       // Sales = AKUMULASI bulan (tgl 1 s/d tanggal item), bukan hanya hari ini
-      const dailyMember = dailyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
-      const dailyWaqaf = dailyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
-      
       const accRev = accRevRes.data?.reduce((acc, curr) => acc + curr.amount, 0) || 0;
       const accMember = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.member_count, 0) || 0;
       const accWaqaf = monthlyWMRes.data?.reduce((acc, curr) => acc + curr.waqaf_amount, 0) || 0;
@@ -221,6 +224,7 @@ export default function DailyRevenueInput() {
 
       const formattedDate = new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       const currentMonthName = new Date(date).toLocaleString('id-ID', { month: 'long' });
+      const waqafToday = dailyWMRes.data;
 
       // Breakdown akumulasi omset per departemen
       let deptOmsetLines = '';
@@ -234,21 +238,23 @@ export default function DailyRevenueInput() {
       }
 
       const message = `*Report Harian, ${formattedDate}*
-Nama : ${profile?.full_name}
-My Value : ${dailyMember}
-Waqaf : ${dailyWaqaf > 0 ? 'Rp ' + dailyWaqaf.toLocaleString('id-ID') : '-'}
+
+*Nama* : *${profile?.full_name}*
+*My Value* : ${waqafToday?.member_count || 0}
+*Waqaf* : ${(waqafToday?.waqaf_amount || 0) > 0 ? (waqafToday?.waqaf_amount || 0).toLocaleString('id-ID') : '-'}
 
 *Akumulasi 1 - ${new Date(date).getDate()} ${currentMonthName} ${new Date(date).getFullYear()}*
-My Value : ${accMember}
-Wakaf : Rp ${accWaqaf.toLocaleString('id-ID')}
+*My Value* : ${accMember}
+*Wakaf* : Rp ${accWaqaf.toLocaleString('id-ID')}
 
-Departement : *${deptLabel}*
-Sales : Rp ${accRev.toLocaleString('id-ID')}${deptOmsetLines}
-Target : Rp ${targetAmt.toLocaleString('id-ID')}
-Achiv : ${achPerc.toFixed(1)}%
-Growth : ${growthPerc.toFixed(1)}%
+*Departement* : *${deptLabel}*
 
-Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
+*Sales* : Rp ${accRev.toLocaleString('id-ID')}${deptOmsetLines}
+*Target* : Rp ${targetAmt.toLocaleString('id-ID')}
+*Achiv* : ${achPerc.toFixed(1)}%
+*Growth* : ${growthPerc.toFixed(1)}%
+
+*Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih* 🙏`;
 
       const encodedMessage = encodeURIComponent(message);
       window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
@@ -384,27 +390,25 @@ Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
                         </Badge>
                       </TableCell>
                       <TableCell className="px-4 py-3 text-end">
-                        <div className="flex justify-end gap-2 items-center">
-                          {item.status === 'approved' && (
-                            <button 
-                              onClick={() => generateWAMessage(item)} 
-                              className="p-1.5 rounded-lg bg-success-50 text-success-600 hover:bg-success-100 transition-colors"
-                              title="Share to WhatsApp"
-                            >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                            </button>
-                          )}
-                          {item.status === 'pending' && (
-                            <>
-                              <button onClick={() => handleEdit(item)} className="text-gray-400 hover:text-brand-500 transition-colors">
-                                <PencilIcon className="size-4" />
+                          <div className="flex justify-end gap-2 items-center">
+                            {(item.status === 'approved' || item.status === 'pending') && (
+                              <button 
+                                onClick={() => generateWAMessage(item)} 
+                                className="p-1.5 rounded-lg bg-success-50 text-success-600 hover:bg-success-100 transition-colors"
+                                title="Share to WhatsApp"
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                               </button>
-                              <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-error-500 transition-colors">
+                            )}
+                            <button onClick={() => handleEdit(item)} className="p-1.5 rounded-lg text-gray-400 hover:text-brand-500 hover:bg-gray-100 transition-colors" title="Revisi Omset">
+                              <PencilIcon className="size-4" />
+                            </button>
+                            {item.status === 'pending' && (
+                              <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-error-500 hover:bg-red-50 transition-colors" title="Hapus">
                                 <TrashBinIcon className="size-4" />
                               </button>
-                            </>
-                          )}
-                        </div>
+                            )}
+                          </div>
                       </TableCell>
                     </TableRow>
                   ))
