@@ -15,6 +15,7 @@ interface Event {
   start_date: string;
   end_date: string;
   type: string;
+  target_type: 'peserta' | 'nominal';
   categories: string;
   reg_link: string;
   max_participants: number;
@@ -33,11 +34,8 @@ export default function EventRegistration() {
   const { profile } = useAuthStore();
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-
-  // Target Info
-  const [targetType, setTargetType] = useState<"peserta" | "nominal">("peserta");
+  
   const [targetValue, setTargetValue] = useState<number>(0);
-
   const [history, setHistory] = useState<Registration[]>([]);
   const [totalEventReg, setTotalEventReg] = useState<number>(0);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
@@ -77,7 +75,6 @@ export default function EventRegistration() {
   async function fetchProgressAndHistory() {
     if (!profile || !selectedEvent) return;
     try {
-      // 1. Fetch Target details
       const { data: targetData } = await supabase
         .from("event_targets")
         .select("target_count, target_type, target_amount")
@@ -86,14 +83,11 @@ export default function EventRegistration() {
         .single();
 
       if (targetData) {
-        setTargetType(targetData.target_type);
-        setTargetValue(targetData.target_type === 'nominal' ? targetData.target_amount : targetData.target_count);
+        setTargetValue(selectedEvent.target_type === 'nominal' ? targetData.target_amount : targetData.target_count);
       } else {
-        setTargetType("peserta");
         setTargetValue(0);
       }
 
-      // 2. Fetch History
       const { data: historyData } = await supabase
         .from("event_registrations")
         .select("*")
@@ -103,12 +97,11 @@ export default function EventRegistration() {
 
       setHistory(historyData || []);
 
-      // 3. Global count for quota
       const { count } = await supabase
         .from("event_registrations")
         .select("*", { count: 'exact', head: true })
         .eq("event_id", selectedEvent.id);
-
+      
       setTotalEventReg(count || 0);
     } catch (error) {
       console.error("Error:", error);
@@ -154,7 +147,7 @@ export default function EventRegistration() {
     }
   }
 
-  const currentAchievement = targetType === 'nominal'
+  const currentAchievement = selectedEvent?.target_type === 'nominal'
     ? history.reduce((sum, item) => sum + (item.payment_amount || 0), 0)
     : history.length;
 
@@ -168,7 +161,9 @@ export default function EventRegistration() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Registrasi Event</h1>
-            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">Capaian Target: {targetType === 'nominal' ? 'Nominal (Rp)' : 'Jumlah Peserta'}</p>
+            <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">
+              Tipe Target: {selectedEvent?.target_type === 'nominal' ? 'Nominal (Rp)' : 'Peserta'}
+            </p>
           </div>
 
           <select className="h-10 px-4 border border-gray-300 rounded-lg dark:bg-gray-900 outline-none min-w-[250px] text-xs font-black uppercase" value={selectedEvent?.id || ""} onChange={(e) => setSelectedEvent(events.find(ev => ev.id === e.target.value) || null)}>
@@ -184,9 +179,9 @@ export default function EventRegistration() {
                 <div className="flex items-end justify-between mb-2">
                   <div className="flex flex-col">
                     <span className="text-2xl font-black text-gray-900 dark:text-white">
-                      {targetType === 'nominal' ? `Rp ${currentAchievement.toLocaleString()}` : `${currentAchievement} Orang`}
+                      {selectedEvent.target_type === 'nominal' ? `Rp ${currentAchievement.toLocaleString()}` : `${currentAchievement} Orang`}
                     </span>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Target: {targetType === 'nominal' ? `Rp ${targetValue.toLocaleString()}` : `${targetValue} Orang`}</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Target: {selectedEvent.target_type === 'nominal' ? `Rp ${targetValue.toLocaleString()}` : `${targetValue} Orang`}</span>
                   </div>
                   <Badge color={currentAchievement >= targetValue ? "success" : "warning"}>{percent}%</Badge>
                 </div>
@@ -211,7 +206,10 @@ export default function EventRegistration() {
                 <h2 className="mb-5 text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Form Registrasi Peserta</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2"><InputField label="Nama Lengkap" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required /></div>
+                    <div className="md:col-span-2">
+                      <InputField label="Nama Lengkap" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} required />
+                    </div>
+                    
                     <div className="space-y-1">
                       <label className="text-[11px] font-black text-gray-500 uppercase">Jenis Kelamin</label>
                       <select className="w-full h-10 px-3 border border-gray-300 rounded-lg dark:bg-gray-900 text-xs font-bold" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} required>
@@ -219,9 +217,18 @@ export default function EventRegistration() {
                       </select>
                     </div>
                     <InputField label="Tgl Lahir" type="date" value={formData.dob} onChange={(e) => setFormData({ ...formData, dob: e.target.value })} required />
-                    <InputField label="WhatsApp" placeholder="08..." value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} required />
-                    <InputField label="Usia/Kategori" placeholder="SD / Umum" value={formData.category_selected} onChange={(e) => setFormData({ ...formData, category_selected: e.target.value })} />
+                    
+                    <InputField label="Email" type="email" placeholder="contoh@gmail.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                    <InputField label="Nomor WhatsApp" placeholder="08..." value={formData.phone_number} onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })} required />
+                    
+                    <InputField label="Instagram" placeholder="@username" value={formData.instagram} onChange={(e) => setFormData({ ...formData, instagram: e.target.value })} />
+                    <InputField label="Usia / Kategori" placeholder="SD / Umum" value={formData.category_selected} onChange={(e) => setFormData({ ...formData, category_selected: e.target.value })} />
+                    
                     <div className="md:col-span-2">
+                      <InputField label="Alamat / Domisili" placeholder="Masukkan alamat lengkap" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
+                    </div>
+
+                    <div className="md:col-span-2 pt-2 border-t border-gray-100 dark:border-white/[0.05]">
                       <InputField label="Nominal Pembayaran (Rp)" type="number" placeholder="Masukkan angka saja" value={formData.payment_amount} onChange={(e) => setFormData({ ...formData, payment_amount: e.target.value })} required />
                     </div>
                   </div>

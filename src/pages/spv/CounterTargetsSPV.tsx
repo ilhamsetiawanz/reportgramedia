@@ -133,13 +133,13 @@ export default function CounterTargetsSPV() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <div className="max-w-full overflow-x-auto">
-            <Table>
+          <div className="max-w-full overflow-x-auto custom-scrollbar shadow-inner">
+            <Table className="w-full" style={{ minWidth: '700px' }}>
               <TableHeader>
                 <TableRow>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Nama Counter / Brand</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Target Omset Bulanan</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-start text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[250px] whitespace-nowrap">Nama Counter / Brand</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-start text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[250px] whitespace-nowrap">Target Omset Bulanan</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-end text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[120px] whitespace-nowrap">Aksi</TableCell>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -158,7 +158,7 @@ export default function CounterTargetsSPV() {
                       <TableCell className="px-5 py-4">
                         <CurrencyInput
                           placeholder="Masukkan Target"
-                          className="h-10 text-sm max-w-[200px]"
+                          className="h-11 text-sm w-full"
                           value={Number(targetInputs[item.id] || 0)}
                           onChange={(val) => setTargetInputs({ ...targetInputs, [item.id]: val.toString() })}
                         />

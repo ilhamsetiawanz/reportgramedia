@@ -142,14 +142,14 @@ export default function MonthlyTargetsSPV() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <div className="max-w-full overflow-x-auto">
-            <Table>
+          <div className="max-w-full overflow-x-auto custom-scrollbar shadow-inner">
+            <Table className="w-full" style={{ minWidth: '950px' }}>
               <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
                 <TableRow>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Departemen</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Target Omset (Bulan Ini)</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start text-theme-xs">Omset LY (Tahun Lalu)</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-start text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[250px] whitespace-nowrap">Departemen</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-start text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[250px] whitespace-nowrap">Target Omset (Bulan Ini)</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-start text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[250px] whitespace-nowrap">Omset LY (Tahun Lalu)</TableCell>
+                  <TableCell isHeader className="px-5 py-4 text-end text-[10px] font-black uppercase tracking-wider text-gray-500 min-w-[120px] whitespace-nowrap">Aksi</TableCell>
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
@@ -168,7 +168,7 @@ export default function MonthlyTargetsSPV() {
                       <TableCell className="px-5 py-4">
                         <CurrencyInput
                           placeholder="Nilai Target"
-                          className="h-10 text-sm max-w-[180px]"
+                          className="h-11 text-sm w-full"
                           value={Number(targetInputs[item.department_id] || 0)}
                           onChange={(val) => setTargetInputs({ ...targetInputs, [item.department_id]: val.toString() })}
                         />
@@ -176,7 +176,7 @@ export default function MonthlyTargetsSPV() {
                       <TableCell className="px-5 py-4">
                         <CurrencyInput
                           placeholder="Nilai LY"
-                          className="h-10 text-sm max-w-[180px]"
+                          className="h-11 text-sm w-full"
                           value={Number(lyInputs[item.department_id] || 0)}
                           onChange={(val) => setLyInputs({ ...lyInputs, [item.department_id]: val.toString() })}
                         />
