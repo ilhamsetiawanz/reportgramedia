@@ -10,7 +10,7 @@ import "jspdf-autotable";
 import { Modal } from "../../components/ui/modal";
 import CurrencyInput from "../../components/form/input/CurrencyInput";
 import { useAuthStore } from "../../store/useAuthStore";
-import { PencilIcon } from "../../icons";
+import { PencilIcon, TrashBinIcon } from "../../icons";
 
 export default function DailyReport() {
   const [data, setData] = useState<any[]>([]);
@@ -31,11 +31,37 @@ export default function DailyReport() {
   async function fetchReport() {
     setIsLoading(true);
     try {
-      const { data: revData, error } = await supabase
+      let query = supabase
         .from('daily_revenue')
         .select('*, departments(name, code), users!daily_revenue_sa_id_fkey(full_name)')
         .eq('date', date)
         .order('amount', { ascending: false });
+
+      if (profile?.role === 'supervisor') {
+        const d = new Date(date);
+        const month = d.getMonth() + 1;
+        const year = d.getFullYear();
+
+        const [assignRes, directRes] = await Promise.all([
+          supabase.from('monthly_assignments').select('department_id').eq('supervisor_id', profile.id).eq('month', month).eq('year', year),
+          supabase.from('departments').select('id').eq('spv_id', profile.id)
+        ]);
+
+        const deptIds = new Set<string>();
+        assignRes.data?.forEach(a => deptIds.add(a.department_id));
+        directRes.data?.forEach(d => deptIds.add(d.id));
+
+        if (deptIds.size > 0) {
+          query = query.in('department_id', Array.from(deptIds));
+        } else {
+          // If no departments assigned, return empty immediately
+          setData([]);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const { data: revData, error } = await query;
       
       if (error) throw error;
       setData(revData || []);
@@ -105,6 +131,18 @@ export default function DailyReport() {
       fetchReport();
     } catch (error) {
       alert("Gagal update: " + (error as any).message);
+    }
+  }
+
+  async function handleDeleteRevenue(id: string) {
+    if (!confirm("Apakah Anda yakin ingin menghapus data omset ini?")) return;
+    try {
+      const { error } = await supabase.from('daily_revenue').delete().eq('id', id);
+      if (error) throw error;
+      alert("Data berhasil dihapus!");
+      fetchReport();
+    } catch (error) {
+      alert("Gagal menghapus data: " + (error as any).message);
     }
   }
 
@@ -268,9 +306,14 @@ Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
                                 </button>
                               </div>
                               {(profile?.role === 'store_manager' || profile?.role === 'supervisor') && (
-                                <button onClick={() => openEditModal(item)} className="text-gray-400 hover:text-brand-500 transition-colors">
-                                  <PencilIcon className="size-4" />
-                                </button>
+                                <>
+                                  <button onClick={() => openEditModal(item)} className="p-1.5 rounded-lg text-gray-400 hover:text-brand-500 hover:bg-gray-100 transition-colors" title="Koreksi Omset">
+                                    <PencilIcon className="size-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteRevenue(item.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-error-500 hover:bg-red-50 transition-colors" title="Hapus Omset">
+                                    <TrashBinIcon className="size-4" />
+                                  </button>
+                                </>
                               )}
                             </div>
                          </TableCell>

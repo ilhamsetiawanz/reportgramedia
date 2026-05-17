@@ -151,7 +151,7 @@ export default function App() {
           <Route path="/counter/report" element={<ProtectedRoute allowedRoles={["counter"]}><CounterReport /></ProtectedRoute>} />
 
           {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
-          <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager"]}><DailyReport /></ProtectedRoute>} />
+          <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><DailyReport /></ProtectedRoute>} />
           <Route path="/reports/daily-recap" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "store_associate"]}><DailyRecap /></ProtectedRoute>} />
           <Route path="/reports/monthly" element={<ProtectedRoute allowedRoles={["store_manager", "store_associate"]}><MonthlyReport /></ProtectedRoute>} />
           <Route path="/reports/waqaf-member" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><WaqafMemberReport /></ProtectedRoute>} />

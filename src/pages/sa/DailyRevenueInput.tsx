@@ -124,11 +124,12 @@ export default function DailyRevenueInput() {
       <PageMeta title="Input Omset | Gramedia Tracker" description="Input omset harian toko" />
       
       <div className="max-w-4xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Input Omset Harian</h1>
+          <p className="text-sm text-gray-500 mt-1">Silakan masukkan omset harian Anda berdasarkan departemen. Pastikan nominal omset sudah diverifikasi sebelum disimpan.</p>
+        </div>
         {/* Input Form */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">
-            Input Omset Harian
-          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <InputField
               label="Tanggal"

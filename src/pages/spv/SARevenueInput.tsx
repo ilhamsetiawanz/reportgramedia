@@ -169,8 +169,11 @@ export default function SARevenueInput() {
       <PageMeta title="Input Omset SA | Gramedia Tracker" description="Input omset harian untuk tim SA" />
       
       <div className="max-w-4xl mx-auto">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Input Omset Tim SA</h1>
+          <p className="text-sm text-gray-500 mt-1">Gunakan form di bawah ini untuk menginput omset harian tim Store Associate yang berada di bawah pengawasan Anda. Pastikan tanggal dan nominal sudah sesuai.</p>
+        </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">Input Omset Tim SA</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <InputField
               label="Tanggal"

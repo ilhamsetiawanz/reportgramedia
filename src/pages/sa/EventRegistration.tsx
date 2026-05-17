@@ -180,38 +180,38 @@ export default function EventRegistration() {
         </div>
 
         {selectedEvent && (
-          <div className="flex flex-col gap-6 w-full">
-            <div className="w-full space-y-6">
-              <div className="rounded-xl border border-gray-200 bg-white p-6 dark:bg-white/[0.03] shadow-sm">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="lg:col-span-1 space-y-5">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 dark:bg-white/[0.03] shadow-sm">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Monitoring Progres</h3>
                 <div className="flex items-end justify-between mb-2">
                   <div className="flex flex-col">
-                    <span className="text-3xl font-black text-gray-900 dark:text-white">
+                    <span className="text-2xl font-black text-gray-900 dark:text-white">
                       {selectedEvent.target_type === 'nominal' ? `Rp ${currentAchievement.toLocaleString()}` : `${currentAchievement} Orang`}
                     </span>
-                    <span className="text-xs text-gray-400 font-bold uppercase mt-1">Target: {selectedEvent.target_type === 'nominal' ? `Rp ${targetValue.toLocaleString()}` : `${targetValue} Orang`}</span>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase">Target: {selectedEvent.target_type === 'nominal' ? `Rp ${targetValue.toLocaleString()}` : `${targetValue} Orang`}</span>
                   </div>
                   <Badge color={currentAchievement >= targetValue ? "success" : "warning"}>{percent}%</Badge>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-3 dark:bg-gray-800 overflow-hidden mt-3">
+                <div className="w-full bg-gray-100 rounded-full h-2 dark:bg-gray-800 overflow-hidden">
                   <div className="bg-brand-500 h-full rounded-full transition-all duration-700" style={{ width: `${percent}%` }}></div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-white p-6 dark:bg-white/[0.03] shadow-sm">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 dark:bg-white/[0.03] shadow-sm">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Link / Form Luar</h3>
                 {selectedEvent.reg_link ? (
-                  <a href={selectedEvent.reg_link.startsWith('http') ? selectedEvent.reg_link : `https://${selectedEvent.reg_link}`} target="_blank" rel="noreferrer" className="flex items-center justify-center w-full py-4 bg-gray-900 text-white text-xs font-black uppercase rounded-lg hover:bg-black transition-all gap-2">
+                  <a href={selectedEvent.reg_link.startsWith('http') ? selectedEvent.reg_link : `https://${selectedEvent.reg_link}`} target="_blank" rel="noreferrer" className="flex items-center justify-center w-full py-3 bg-gray-900 text-white text-[10px] font-black uppercase rounded-lg hover:bg-black transition-all gap-2">
                     Buka Website Event
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
                   </a>
-                ) : <p className="text-xs text-gray-400 italic">Tidak ada link eksternal.</p>}
+                ) : <p className="text-[10px] text-gray-400 italic">Tidak ada link eksternal.</p>}
               </div>
             </div>
 
-            <div className="w-full">
-              <div className="rounded-xl border border-gray-200 bg-white p-8 dark:bg-white/[0.03] shadow-sm">
-                <h2 className="mb-6 text-base font-black text-gray-900 dark:text-white uppercase tracking-wider">Form Registrasi Peserta</h2>
+            <div className="lg:col-span-2 space-y-5">
+              <div className="rounded-xl border border-gray-200 bg-white p-6 dark:bg-white/[0.03] shadow-sm">
+                <h2 className="mb-5 text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Form Registrasi Peserta</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">

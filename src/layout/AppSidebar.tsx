@@ -132,6 +132,7 @@ const AppSidebar: React.FC = () => {
       sections.push({ title: "Target Mingguan", items: targetItems });
 
       const reportSubItems: { name: string; path: string }[] = [
+        { name: "Omset Harian", path: "/reports/daily" },
         { name: "Omset Dept", path: "/reports/dept" },
         { name: "Rekap Omset Harian", path: "/reports/daily-recap" },
         { name: "Waqaf & Member", path: "/reports/waqaf-member" },
