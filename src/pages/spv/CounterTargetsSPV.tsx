@@ -28,7 +28,7 @@ export default function CounterTargetsSPV() {
   }, [profile, selectedMonth, selectedYear]);
 
   async function fetchCounterTargets() {
-    setIsLoading(true);
+    if (counters.length === 0) setIsLoading(true);
     try {
       // 1. Get counters assigned to this SPV
       const { data: counterData, error: counterError } = await supabase

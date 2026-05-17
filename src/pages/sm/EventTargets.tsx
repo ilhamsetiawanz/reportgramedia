@@ -63,7 +63,7 @@ export default function EventTargets() {
   }
 
   async function fetchTargets() {
-    setIsLoading(true);
+    if (targets.length === 0) setIsLoading(true);
     const { data } = await supabase.from("event_targets").select("*").eq("event_id", selectedEventId);
     setTargets(data || []);
     setIsLoading(false);

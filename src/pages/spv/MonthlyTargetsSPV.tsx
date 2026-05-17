@@ -28,7 +28,7 @@ export default function MonthlyTargetsSPV() {
   }, [selectedMonth, selectedYear]);
 
   async function fetchTargetData() {
-    setIsLoading(true);
+    if (data.length === 0) setIsLoading(true);
     try {
       if (!profile) return;
 

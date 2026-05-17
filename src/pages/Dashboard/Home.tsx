@@ -75,10 +75,38 @@ export default function Home() {
         let pendQ = supabase.from('daily_revenue').select('id', { count: 'exact', head: true }).eq('status', 'pending');
 
         if (role === 'supervisor') {
-          const { data: depts } = await supabase.from('departments').select('id').eq('supervisor_id', profile?.id);
-          const deptIds = depts?.map(d => d.id) || [];
-          revQ = revQ.in('department_id', deptIds);
-          pendQ = pendQ.in('department_id', deptIds);
+          const [directDepts, assignedDepts] = await Promise.all([
+            supabase.from('departments').select('id').eq('supervisor_id', profile?.id),
+            supabase.from('monthly_assignments').select('department_id')
+              .eq('supervisor_id', profile?.id).eq('month', now.getMonth() + 1).eq('year', now.getFullYear())
+          ]);
+          
+          const deptIds = Array.from(new Set([
+            ...(directDepts.data?.map(d => d.id) || []),
+            ...(assignedDepts.data?.map(a => a.department_id) || [])
+          ])).filter(Boolean);
+
+          if (deptIds.length > 0) {
+              revQ = revQ.in('department_id', deptIds);
+              pendQ = pendQ.in('department_id', deptIds);
+
+              const { data: saAssignments } = await supabase.from('monthly_assignments')
+                  .select('sa_id')
+                  .in('department_id', deptIds)
+                  .eq('month', now.getMonth() + 1)
+                  .eq('year', now.getFullYear());
+              
+              const saIds = saAssignments?.map(a => a.sa_id).filter(Boolean) || [];
+              if (saIds.length > 0) {
+                  waqQ = waqQ.in('sa_id', saIds);
+              } else {
+                  waqQ = waqQ.eq('id', 'dummy'); 
+              }
+          } else {
+              revQ = revQ.eq('id', 'dummy');
+              pendQ = pendQ.eq('id', 'dummy');
+              waqQ = waqQ.eq('id', 'dummy');
+          }
         } else if (role === 'store_associate') {
           revQ = revQ.eq('sa_id', profile?.id);
           waqQ = waqQ.eq('sa_id', profile?.id);

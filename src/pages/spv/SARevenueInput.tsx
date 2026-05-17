@@ -5,8 +5,6 @@ import PageMeta from "../../components/common/PageMeta";
 import InputField from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
 import CurrencyInput from "../../components/form/input/CurrencyInput";
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "../../components/ui/table";
-import { TrashBinIcon } from "../../icons";
 
 interface SAProfile {
   id: string;
@@ -18,38 +16,33 @@ interface Department {
   name: string;
 }
 
-interface RevenueEntry {
-  id: string;
-  date: string;
-  amount: number;
-  status: string;
-  sa: { full_name: string } | null;
-  departments: { name: string } | null;
-}
-
 export default function SARevenueInput() {
   const { profile } = useAuthStore();
   
-  // Lists
   const [saList, setSaList] = useState<SAProfile[]>([]);
   const [deptList, setDeptList] = useState<Department[]>([]);
-  const [history, setHistory] = useState<RevenueEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
-
-  // Form State
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split("T")[0],
-    sa_id: "",
-    department_id: "",
-    amount: 0,
-    notes: ""
+  
+  const [formData, setFormData] = useState(() => {
+    const saved = localStorage.getItem('saRevenueDraft');
+    if (saved) return JSON.parse(saved);
+    return {
+      date: new Date().toISOString().split("T")[0],
+      sa_id: "",
+      department_id: "",
+      amount: 0,
+      notes: ""
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('saRevenueDraft', JSON.stringify(formData));
+  }, [formData]);
 
   useEffect(() => {
     if (profile?.id && formData.date) {
       fetchMySA();
-      fetchHistory();
     }
   }, [profile, formData.date]);
 
@@ -58,7 +51,7 @@ export default function SARevenueInput() {
       fetchSADepartments(formData.sa_id);
     } else {
       setDeptList([]);
-      setFormData(prev => ({ ...prev, department_id: "" }));
+      setFormData((prev: any) => ({ ...prev, department_id: "" }));
     }
   }, [formData.sa_id, formData.date]);
 
@@ -120,33 +113,14 @@ export default function SARevenueInput() {
 
       setDeptList(depts);
       if (depts.length > 0) {
-        setFormData(prev => ({ ...prev, department_id: depts[0].id }));
+        setFormData((prev: any) => ({ ...prev, department_id: depts[0].id }));
       }
     } catch (error) {
       console.error("Error fetching depts:", error);
     }
   }
 
-  async function fetchHistory() {
-    try {
-      const { data, error } = await supabase
-        .from("daily_revenue")
-        .select("id, date, amount, status, sa_id, users!daily_revenue_sa_id_fkey(full_name), departments(name)")
-        .eq("verified_by", profile?.id) // entries created/verified by this SPV
-        .order("date", { ascending: false })
-        .limit(10);
-      
-      if (error) throw error;
-      
-      const formattedData = (data || []).map(item => ({
-        ...item,
-        sa: item.users as any
-      }));
-      setHistory(formattedData as any);
-    } catch (error) {
-      console.error("Error fetching history:", error);
-    }
-  }
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -176,13 +150,13 @@ export default function SARevenueInput() {
 
       alert("Omset SA berhasil disimpan!");
       
-      // Keep date and SA selected for faster input
-      setFormData(prev => ({
+      // Keep date and SA selected for faster input, but clear amount and notes
+      setFormData((prev: any) => ({
         ...prev,
         amount: 0,
         notes: ""
       }));
-      fetchHistory();
+      localStorage.removeItem('saRevenueDraft');
     } catch (error) {
       alert("Gagal menyimpan omset: " + (error as any).message);
     } finally {
@@ -190,23 +164,11 @@ export default function SARevenueInput() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Hapus input omset ini?")) return;
-    try {
-      const { error } = await supabase.from("daily_revenue").delete().eq("id", id);
-      if (error) throw error;
-      fetchHistory();
-    } catch (error) {
-      alert("Gagal hapus: " + (error as any).message);
-    }
-  }
-
   return (
     <>
       <PageMeta title="Input Omset SA | Gramedia Tracker" description="Input omset harian untuk tim SA" />
       
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Input Form */}
+      <div className="max-w-4xl mx-auto">
         <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
           <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">Input Omset Tim SA</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -273,48 +235,6 @@ export default function SARevenueInput() {
               {isLoading ? "Mengirim..." : "Simpan Omset"}
             </Button>
           </form>
-        </div>
-
-        {/* History */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-white/[0.05] dark:bg-white/[0.03]">
-          <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">10 Input Terakhir Anda</h2>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell isHeader className="px-4 py-3 text-theme-xs">Tanggal</TableCell>
-                  <TableCell isHeader className="px-4 py-3 text-theme-xs">SA / Dept</TableCell>
-                  <TableCell isHeader className="px-4 py-3 text-theme-xs">Nominal</TableCell>
-                  <TableCell isHeader className="px-4 py-3 text-end text-theme-xs">Aksi</TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-gray-500 text-sm">Belum ada data yang diinput oleh Anda.</TableCell>
-                  </TableRow>
-                ) : (
-                  history.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="px-4 py-3 text-sm">{item.date}</TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{item.sa?.full_name || "-"}</span>
-                          <span className="text-xs text-gray-500">{item.departments?.name || "-"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-sm font-bold">Rp {item.amount.toLocaleString()}</TableCell>
-                      <TableCell className="px-4 py-3 text-end">
-                        <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-error-500 transition-colors">
-                          <TrashBinIcon className="size-4" />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
         </div>
       </div>
     </>
