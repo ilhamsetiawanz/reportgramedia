@@ -5,8 +5,6 @@ import PageMeta from "../../components/common/PageMeta";
 import InputField from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
 import CurrencyInput from "../../components/form/input/CurrencyInput";
-import Badge from "../../components/ui/badge/Badge";
-import { PencilIcon } from "../../icons";
 
 interface Department {
   id: string;
