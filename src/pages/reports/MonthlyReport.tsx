@@ -15,10 +15,20 @@ interface MonthlyData {
   actual: number;
   target: number;
   last_year: number;
+  spv_id?: string;
+}
+
+interface SpvMonthlyData {
+  spv_id: string;
+  spv_name: string;
+  actual: number;
+  target: number;
+  last_year: number;
 }
 
 export default function MonthlyReport() {
   const [data, setData] = useState<MonthlyData[]>([]);
+  const [spvData, setSpvData] = useState<SpvMonthlyData[]>([]);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [isLoading, setIsLoading] = useState(false);
@@ -81,21 +91,63 @@ export default function MonthlyReport() {
         .gte('date', startDate)
         .lte('date', endDate);
       
+      // 4. Get SPV Assignments
+      const { data: assignments } = await supabase
+        .from('monthly_assignments')
+        .select('department_id, supervisor_id')
+        .eq('month', month)
+        .eq('year', year);
+
+      // 5. Get SPV Names
+      const { data: supervisors } = await supabase
+        .from('users')
+        .select('id, full_name')
+        .eq('role', 'supervisor');
+
       // Process Data
       const processed: MonthlyData[] = (depts || []).map(dept => {
         const targetObj = targets?.find(t => t.department_id === dept.id);
         const actualAmount = actuals?.filter(a => a.department_id === dept.id).reduce((acc, curr) => acc + curr.amount, 0) || 0;
+        const spvAssignment = assignments?.find(a => a.department_id === dept.id);
         
         return {
           dept_id: dept.id,
           dept_name: dept.name,
           actual: actualAmount,
           target: targetObj?.target_amount || 0,
-          last_year: targetObj?.last_year_amount || 0
+          last_year: targetObj?.last_year_amount || 0,
+          spv_id: spvAssignment?.supervisor_id
         };
       });
 
       setData(processed);
+
+      // Process SPV Data for SM
+      if (profile.role === 'store_manager') {
+        const spvMap: Record<string, SpvMonthlyData> = {};
+        
+        processed.forEach(d => {
+          const sId = d.spv_id || "UNASSIGNED";
+          if (!spvMap[sId]) {
+            const spvInfo = supervisors?.find(s => s.id === sId);
+            spvMap[sId] = {
+              spv_id: sId,
+              spv_name: spvInfo ? spvInfo.full_name : "Belum Diplot (Unassigned)",
+              actual: 0,
+              target: 0,
+              last_year: 0
+            };
+          }
+          spvMap[sId].actual += d.actual;
+          spvMap[sId].target += d.target;
+          spvMap[sId].last_year += d.last_year;
+        });
+
+        // Filter out Unassigned if everything is 0
+        const finalSpvData = Object.values(spvMap).filter(s => s.actual > 0 || s.target > 0 || s.last_year > 0);
+        setSpvData(finalSpvData.sort((a, b) => b.actual - a.actual));
+      }
+
     } catch (error) {
       console.error("Error fetching monthly report:", error);
     } finally {
@@ -387,6 +439,78 @@ export default function MonthlyReport() {
             </table>
           </div>
         </div>
+
+        {/* SPV Table Section for SM */}
+        {profile?.role === 'store_manager' && spvData.length > 0 && !isLoading && (
+          <div className="mt-8 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.05]">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Akumulasi Omset per Supervisor</h3>
+            </div>
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-white/[0.02] text-gray-900 dark:text-white">
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-gray-200 dark:border-white/5 min-w-[180px]">Nama Supervisor</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5 border-r border-gray-200 dark:border-white/5">Omset</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5 border-r border-gray-200 dark:border-white/5">Growth</th>
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold text-center border-r border-gray-200 dark:border-white/5">Target {year}</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5">Achievement</th>
+                  </tr>
+                  <tr className="bg-gray-100 dark:bg-white/[0.02] text-gray-900 dark:text-white">
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">{year - 1}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">{year}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">Selisih</th>
+                    <th className="px-5 py-2 text-xs font-bold text-center border-r border-gray-200 dark:border-white/5">%</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">Selisih</th>
+                    <th className="px-5 py-2 text-xs font-bold text-center">%</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {spvData.map((item) => {
+                    const growthNom = item.actual - item.last_year;
+                    const growthPerc = calculatePerc(growthNom, item.last_year);
+                    const achNom = item.actual - item.target;
+                    const achPerc = calculatePerc(item.actual, item.target);
+
+                    return (
+                      <tr key={item.spv_id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                        <td className="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white border-r border-gray-100 dark:border-white/5">
+                          {item.spv_name}
+                        </td>
+                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5">{formatIDR(item.last_year)}</td>
+                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold text-brand-600">{formatIDR(item.actual)}</td>
+                        <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 ${growthNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(growthNom)}</td>
+                        <td className={`px-5 py-3 text-sm text-center border-r border-gray-100 dark:border-white/5 font-bold ${growthPerc < 0 ? 'text-error-600' : 'text-success-600'}`}>
+                          {growthPerc.toFixed(2)}%
+                        </td>
+                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5">{formatIDR(item.target)}</td>
+                        <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold ${achNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(achNom)}</td>
+                        <td className={`px-5 py-3 text-sm text-center font-bold ${achPerc >= 100 ? 'text-success-600' : achPerc >= 80 ? 'text-amber-500' : 'text-error-600'}`}>
+                          {achPerc.toFixed(2)}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Total for SPV Table */}
+                  <tr className="bg-gray-100 dark:bg-white/[0.03] text-gray-900 dark:text-white font-bold">
+                     <td className="px-5 py-3 text-sm border-r border-gray-200 dark:border-white/5 uppercase">Total Akumulasi</td>
+                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.ly)}</td>
+                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5 text-brand-600">{formatIDR(totals.actual)}</td>
+                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.actual - totals.ly)}</td>
+                     <td className={`px-5 py-3 text-sm text-center border-r border-gray-200 dark:border-white/5 font-bold ${(totals.actual - totals.ly) < 0 ? 'text-error-600' : 'text-success-600'}`}>
+                        {calculatePerc(totals.actual - totals.ly, totals.ly).toFixed(2)}%
+                     </td>
+                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.target)}</td>
+                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.actual - totals.target)}</td>
+                     <td className={`px-5 py-3 text-sm text-center font-black ${calculatePerc(totals.actual, totals.target) >= 100 ? 'text-success-600' : 'text-error-600'}`}>
+                        {calculatePerc(totals.actual, totals.target).toFixed(2)}%
+                     </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
