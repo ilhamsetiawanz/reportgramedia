@@ -137,10 +137,14 @@ export default function DailyReport() {
   );
   const [filterDeptIds, setFilterDeptIds] = useState<string[]>([]); // empty = all
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterSaId, setFilterSaId] = useState("all"); // SM only
+  const [filterSpvId, setFilterSpvId] = useState("all"); // SM only
 
   // ── Data ─────────────────────────────────────────────────────
   const [data, setData] = useState<any[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [saList, setSaList] = useState<{ id: string; name: string }[]>([]); // SM only
+  const [spvList, setSpvList] = useState<{ id: string; name: string }[]>([]); // SM only
   const [isLoading, setIsLoading] = useState(false);
 
   // ── Edit Modal ───────────────────────────────────────────────
@@ -173,6 +177,19 @@ export default function DailyReport() {
   }, [profile]);
 
   useEffect(() => { fetchDepartments(); }, [fetchDepartments]);
+
+  // ── Load SA & SPV lists (SM only) ────────────────────────────
+  useEffect(() => {
+    if (profile?.role !== "store_manager") return;
+    (async () => {
+      const [saRes, spvRes] = await Promise.all([
+        supabase.from("users").select("id, full_name").eq("role", "store_associate").eq("is_active", true).order("full_name"),
+        supabase.from("users").select("id, full_name").eq("role", "supervisor").eq("is_active", true).order("full_name"),
+      ]);
+      setSaList((saRes.data || []).map((u: any) => ({ id: u.id, name: u.full_name })));
+      setSpvList((spvRes.data || []).map((u: any) => ({ id: u.id, name: u.full_name })));
+    })();
+  }, [profile]);
 
   // ── Fetch revenue data ────────────────────────────────────────
   const fetchReport = useCallback(async () => {
@@ -222,6 +239,40 @@ export default function DailyReport() {
         if (filterDeptIds.length > 0) {
           query = query.in("department_id", filterDeptIds);
         }
+        // SM: filter by SA directly
+        if (filterSaId !== "all") {
+          query = query.eq("sa_id", filterSaId);
+        }
+        // SM: filter by SPV — resolve their departments first
+        if (filterSpvId !== "all") {
+          const fromDate = new Date(filterDateFrom);
+          const toDate = new Date(filterDateTo);
+          const monthsSet = new Set<string>();
+          const cursor = new Date(fromDate);
+          while (cursor <= toDate) {
+            monthsSet.add(`${cursor.getFullYear()}-${cursor.getMonth() + 1}`);
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+          const spvDeptIds = new Set<string>();
+          for (const ym of monthsSet) {
+            const [y, m] = ym.split("-").map(Number);
+            const { data: assigns } = await supabase
+              .from("monthly_assignments")
+              .select("department_id")
+              .eq("supervisor_id", filterSpvId)
+              .eq("month", m)
+              .eq("year", y);
+            assigns?.forEach((a: any) => spvDeptIds.add(a.department_id));
+          }
+          if (spvDeptIds.size === 0) { setData([]); setIsLoading(false); return; }
+          // Intersect with dept filter if both are active
+          const effectiveDepts =
+            filterDeptIds.length > 0
+              ? filterDeptIds.filter((id) => spvDeptIds.has(id))
+              : Array.from(spvDeptIds);
+          if (effectiveDepts.length === 0) { setData([]); setIsLoading(false); return; }
+          query = query.in("department_id", effectiveDepts);
+        }
       }
 
       const { data: revData, error } = await query;
@@ -232,7 +283,7 @@ export default function DailyReport() {
     } finally {
       setIsLoading(false);
     }
-  }, [profile, filterDateFrom, filterDateTo, filterDeptIds, filterStatus]);
+  }, [profile, filterDateFrom, filterDateTo, filterDeptIds, filterStatus, filterSaId, filterSpvId]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -453,8 +504,42 @@ Semoga Hari Esok Bisa Lebih Baik lagi Terimakasih 🙏`;
               </select>
             </div>
 
+            {/* SM-only: filter by SA */}
+            {profile?.role === "store_manager" && (
+              <div className="flex flex-col gap-1 w-full sm:flex-1 sm:min-w-[160px]">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">SA / Penginput</label>
+                <select
+                  value={filterSaId}
+                  onChange={(e) => setFilterSaId(e.target.value)}
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300"
+                >
+                  <option value="all">Semua SA</option>
+                  {saList.map((sa) => (
+                    <option key={sa.id} value={sa.id}>{sa.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* SM-only: filter by SPV */}
+            {profile?.role === "store_manager" && (
+              <div className="flex flex-col gap-1 w-full sm:flex-1 sm:min-w-[160px]">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">SPV / Supervisor</label>
+                <select
+                  value={filterSpvId}
+                  onChange={(e) => setFilterSpvId(e.target.value)}
+                  className="w-full h-10 px-3 text-sm border border-gray-300 rounded-lg outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-300"
+                >
+                  <option value="all">Semua SPV</option>
+                  {spvList.map((spv) => (
+                    <option key={spv.id} value={spv.id}>{spv.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <button
-              onClick={() => { setFilterDeptIds([]); setFilterStatus("all"); }}
+              onClick={() => { setFilterDeptIds([]); setFilterStatus("all"); setFilterSaId("all"); setFilterSpvId("all"); }}
               className="w-full sm:w-auto h-10 px-4 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5 transition-colors"
             >
               Reset Filter
