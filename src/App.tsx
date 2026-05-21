@@ -35,6 +35,8 @@ import CounterEventRegistration from "./pages/counter/CounterEventRegistration";
 import ManageCounters from "./pages/sm/ManageCounters";
 import CounterWeeklyRevenue from "./pages/counter/CounterWeeklyRevenue";
 import CounterTargetsSPV from "./pages/spv/CounterTargetsSPV";
+import RevenueHistory from "./pages/RevenueHistory";
+import CounterRevenueHistory from "./pages/reports/CounterRevenueHistory";
 
 
 /**
@@ -141,6 +143,7 @@ export default function App() {
 
           {/* SA Routes */}
           <Route path="/sa/revenue" element={<ProtectedRoute allowedRoles={["store_associate"]}><DailyRevenueInput /></ProtectedRoute>} />
+          <Route path="/sa/revenue-history" element={<ProtectedRoute allowedRoles={["store_associate"]}><RevenueHistory /></ProtectedRoute>} />
           <Route path="/sa/waqaf" element={<ProtectedRoute allowedRoles={["store_associate"]}><WaqafMemberInput /></ProtectedRoute>} />
           <Route path="/sa/activities" element={<ProtectedRoute allowedRoles={["store_associate"]}><ActivityReportInput /></ProtectedRoute>} />
           <Route path="/sa/event-registration" element={<ProtectedRoute allowedRoles={["store_associate"]}><EventRegistration /></ProtectedRoute>} />
@@ -148,6 +151,7 @@ export default function App() {
           {/* Counter Routes */}
           <Route path="/counter/event-registration" element={<ProtectedRoute allowedRoles={["counter"]}><CounterEventRegistration /></ProtectedRoute>} />
           <Route path="/counter/revenue" element={<ProtectedRoute allowedRoles={["counter"]}><CounterWeeklyRevenue /></ProtectedRoute>} />
+          <Route path="/counter/revenue-history" element={<ProtectedRoute allowedRoles={["counter"]}><RevenueHistory /></ProtectedRoute>} />
           <Route path="/counter/report" element={<ProtectedRoute allowedRoles={["counter"]}><CounterReport /></ProtectedRoute>} />
 
           {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
@@ -159,6 +163,7 @@ export default function App() {
           <Route path="/reports/activities" element={<ProtectedRoute allowedRoles={["supervisor"]}><ActivityReport /></ProtectedRoute>} />
           <Route path="/reports/event-participants" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><EventParticipantReport /></ProtectedRoute>} />
           <Route path="/reports/counter-weekly" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "counter"]}><CounterWeeklyRecap /></ProtectedRoute>} />
+          <Route path="/reports/counter-history" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><CounterRevenueHistory /></ProtectedRoute>} />
 
           <Route path="/blank" element={<Blank />} />
         </Route>

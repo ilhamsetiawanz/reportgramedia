@@ -100,6 +100,7 @@ const AppSidebar: React.FC = () => {
               { name: "Omset Harian", path: "/reports/daily" },
               { name: "Rekap Omset Harian", path: "/reports/daily-recap" },
               { name: "Rekap Omset Counter", path: "/reports/counter-weekly" },
+              { name: "Riwayat Counter", path: "/reports/counter-history" },
               { name: "Omset Bulanan", path: "/reports/monthly" },
               { name: "Waqaf & Member", path: "/reports/waqaf-member" },
               { name: "Peserta Event", path: "/reports/event-participants" },
@@ -141,6 +142,7 @@ const AppSidebar: React.FC = () => {
       ];
       if (spvHasCounter) {
         reportSubItems.splice(2, 0, { name: "Rekap Omset Counter", path: "/reports/counter-weekly" });
+        reportSubItems.splice(3, 0, { name: "Riwayat Counter", path: "/reports/counter-history" });
       }
       sections.push({
         title: "Laporan",
@@ -155,6 +157,7 @@ const AppSidebar: React.FC = () => {
         title: "Input Data",
         items: [
           { name: "Input Omset", icon: <PlusIcon />, path: "/sa/revenue" },
+          { name: "Riwayat Omset", icon: <TableIcon />, path: "/sa/revenue-history" },
           { name: "Waqaf & Member", icon: <DollarLineIcon />, path: "/sa/waqaf" },
           { name: "Pendaftaran Event", icon: <ListIcon />, path: "/sa/event-registration" },
         ],
@@ -175,6 +178,7 @@ const AppSidebar: React.FC = () => {
         title: "Aktivitas Counter",
         items: [
           { name: "Input Omset Mingguan", icon: <DollarLineIcon />, path: "/counter/revenue" },
+          { name: "Riwayat Omset", icon: <TableIcon />, path: "/counter/revenue-history" },
           { name: "Pendaftaran Event", icon: <ListIcon />, path: "/counter/event-registration" },
         ],
       });
