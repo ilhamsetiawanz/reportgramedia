@@ -167,6 +167,7 @@ const AppSidebar: React.FC = () => {
         items: [
           { name: "Rekap Harian", icon: <TableIcon />, path: "/reports/daily-recap" },
           { name: "Laporan Bulanan", icon: <PieChartIcon />, path: "/reports/monthly" },
+          { name: "Waqaf & Member", icon: <DollarLineIcon />, path: "/reports/waqaf-member" },
         ],
       });
     } else if (role === "counter") {

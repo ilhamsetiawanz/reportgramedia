@@ -8,6 +8,7 @@ import autoTable from "jspdf-autotable";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
+import { ChevronDownIcon, AngleRightIcon } from "../../icons";
 
 interface MonthlyData {
   dept_id: string;
@@ -18,17 +19,27 @@ interface MonthlyData {
   spv_id?: string;
 }
 
+interface DeptInSpv {
+  dept_id: string;
+  dept_name: string;
+  actual: number;
+  target: number;
+  last_year: number;
+}
+
 interface SpvMonthlyData {
   spv_id: string;
   spv_name: string;
   actual: number;
   target: number;
   last_year: number;
+  departments: DeptInSpv[];
 }
 
 export default function MonthlyReport() {
   const [data, setData] = useState<MonthlyData[]>([]);
   const [spvData, setSpvData] = useState<SpvMonthlyData[]>([]);
+  const [expandedSpv, setExpandedSpv] = useState<Set<string>>(new Set());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [isLoading, setIsLoading] = useState(false);
@@ -135,17 +146,29 @@ export default function MonthlyReport() {
               spv_name: spvInfo ? spvInfo.full_name : "Belum Diplot (Unassigned)",
               actual: 0,
               target: 0,
-              last_year: 0
+              last_year: 0,
+              departments: []
             };
           }
           spvMap[sId].actual += d.actual;
           spvMap[sId].target += d.target;
           spvMap[sId].last_year += d.last_year;
+          spvMap[sId].departments.push({
+            dept_id: d.dept_id,
+            dept_name: d.dept_name,
+            actual: d.actual,
+            target: d.target,
+            last_year: d.last_year,
+          });
         });
 
         // Filter out Unassigned if everything is 0
         const finalSpvData = Object.values(spvMap).filter(s => s.actual > 0 || s.target > 0 || s.last_year > 0);
+        // Sort departments within each SPV by actual descending
+        finalSpvData.forEach(s => s.departments.sort((a, b) => b.actual - a.actual));
         setSpvData(finalSpvData.sort((a, b) => b.actual - a.actual));
+        // Auto-expand all SPVs by default
+        setExpandedSpv(new Set(finalSpvData.map(s => s.spv_id)));
       }
 
     } catch (error) {
@@ -232,6 +255,118 @@ export default function MonthlyReport() {
     });
 
     doc.save(`Laporan_Bulanan_${monthName}_${year}.pdf`);
+  };
+
+  const exportSpvPDF = () => {
+    const doc = new jsPDF('l', 'mm', 'a4'); 
+    const monthName = new Date(0, month - 1).toLocaleString('id-ID', { month: 'long' });
+
+    doc.setFontSize(16);
+    doc.text(`Laporan Bulanan Per Supervisor - Gramedia Kendari`, 14, 15);
+    doc.setFontSize(12);
+    doc.text(`Periode: ${monthName} ${year}`, 14, 22);
+
+    const tableColumn = ["Supervisor / Departemen", `Omset ${year-1}`, `Omset ${year}`, "Growth (Nom)", "Growth (%)", `Target ${year}`, "Ach (Nom)", "Ach (%)"];
+    const tableRows: any[] = [];
+    const rowTypes: ('spv_header' | 'dept' | 'spv_total' | 'grand_total')[] = [];
+
+    spvData.forEach(spv => {
+      // 1. SPV Header Row
+      tableRows.push([
+        spv.spv_name,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]);
+      rowTypes.push('spv_header');
+
+      // 2. Department Rows
+      spv.departments.forEach(dept => {
+        const dGrowthNom = dept.actual - dept.last_year;
+        const dGrowthPerc = calculatePerc(dGrowthNom, dept.last_year);
+        const dAchNom = dept.actual - dept.target;
+        const dAchPerc = calculatePerc(dept.actual, dept.target);
+
+        tableRows.push([
+          `   ${dept.dept_name}`,
+          formatIDR(dept.last_year),
+          formatIDR(dept.actual),
+          formatIDR(dGrowthNom),
+          `${dGrowthPerc.toFixed(2)}%`,
+          formatIDR(dept.target),
+          formatIDR(dAchNom),
+          `${dAchPerc.toFixed(2)}%`
+        ]);
+        rowTypes.push('dept');
+      });
+
+      // 3. SPV Total / Accumulation Row
+      const spvGrowthNom = spv.actual - spv.last_year;
+      const spvGrowthPerc = calculatePerc(spvGrowthNom, spv.last_year);
+      const spvAchNom = spv.actual - spv.target;
+      const spvAchPerc = calculatePerc(spv.actual, spv.target);
+
+      tableRows.push([
+        `Akumulasi - ${spv.spv_name}`,
+        formatIDR(spv.last_year),
+        formatIDR(spv.actual),
+        formatIDR(spvGrowthNom),
+        `${spvGrowthPerc.toFixed(2)}%`,
+        formatIDR(spv.target),
+        formatIDR(spvAchNom),
+        `${spvAchPerc.toFixed(2)}%`
+      ]);
+      rowTypes.push('spv_total');
+    });
+
+    // 4. Grand Total Row
+    const grandGrowthNom = totals.actual - totals.ly;
+    const grandGrowthPerc = calculatePerc(grandGrowthNom, totals.ly);
+    const grandAchNom = totals.actual - totals.target;
+    const grandAchPerc = calculatePerc(totals.actual, totals.target);
+
+    tableRows.push([
+      "GRAND TOTAL",
+      formatIDR(totals.ly),
+      formatIDR(totals.actual),
+      formatIDR(grandGrowthNom),
+      `${grandGrowthPerc.toFixed(2)}%`,
+      formatIDR(totals.target),
+      formatIDR(grandAchNom),
+      `${grandAchPerc.toFixed(2)}%`
+    ]);
+    rowTypes.push('grand_total');
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 28,
+      theme: 'grid',
+      headStyles: { fillColor: [43, 86, 179] },
+      didParseCell: (data: any) => {
+        const rowIndex = data.row.index;
+        const type = rowTypes[rowIndex];
+
+        if (type === 'spv_header') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [224, 231, 255];
+          data.cell.styles.textColor = [30, 58, 138];
+        } else if (type === 'spv_total') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [243, 244, 246];
+        } else if (type === 'grand_total') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [43, 86, 179];
+          data.cell.styles.textColor = [255, 255, 255];
+        }
+      }
+    });
+
+    doc.save(`Laporan_Bulanan_SPV_${monthName}_${year}.pdf`);
   };
 
   return (
@@ -443,66 +578,163 @@ export default function MonthlyReport() {
         {/* SPV Table Section for SM */}
         {profile?.role === 'store_manager' && spvData.length > 0 && !isLoading && (
           <div className="mt-8 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.05]">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Akumulasi Omset per Supervisor</h3>
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Rekap Omset per Supervisor & Departemen</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Klik baris supervisor untuk melihat/menyembunyikan detail departemen</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExpandedSpv(new Set(spvData.map(s => s.spv_id)))}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 font-medium hover:bg-brand-100 transition-colors"
+                >
+                  Buka Semua
+                </button>
+                <button
+                  onClick={() => setExpandedSpv(new Set())}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400 font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Tutup Semua
+                </button>
+                <Button variant="outline" size="sm" onClick={exportSpvPDF} disabled={spvData.length === 0}>
+                  Export PDF SPV
+                </Button>
+              </div>
             </div>
             <div className="max-w-full overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-100 dark:bg-white/[0.02] text-gray-900 dark:text-white">
-                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-gray-200 dark:border-white/5 min-w-[180px]">Nama Supervisor</th>
-                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5 border-r border-gray-200 dark:border-white/5">Omset</th>
-                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5 border-r border-gray-200 dark:border-white/5">Growth</th>
-                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold text-center border-r border-gray-200 dark:border-white/5">Target {year}</th>
-                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-gray-200 dark:border-white/5">Achievement</th>
+                  <tr className="bg-brand-600 text-white">
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-white/20 min-w-[220px]">Supervisor / Departemen</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Omset</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Growth</th>
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold text-center border-r border-white/20">Target {year}</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20">Achievement</th>
                   </tr>
-                  <tr className="bg-gray-100 dark:bg-white/[0.02] text-gray-900 dark:text-white">
-                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">{year - 1}</th>
-                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">{year}</th>
-                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">Selisih</th>
-                    <th className="px-5 py-2 text-xs font-bold text-center border-r border-gray-200 dark:border-white/5">%</th>
-                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-gray-200 dark:border-white/5">Selisih</th>
+                  <tr className="bg-brand-600 text-white">
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">{year - 1}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">{year}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">Selisih</th>
+                    <th className="px-5 py-2 text-xs font-bold text-center border-r border-white/20">%</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">Selisih</th>
                     <th className="px-5 py-2 text-xs font-bold text-center">%</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {spvData.map((item) => {
-                    const growthNom = item.actual - item.last_year;
-                    const growthPerc = calculatePerc(growthNom, item.last_year);
-                    const achNom = item.actual - item.target;
-                    const achPerc = calculatePerc(item.actual, item.target);
+                <tbody>
+                  {spvData.map((spv) => {
+                    const isExpanded = expandedSpv.has(spv.spv_id);
+                    const growthNom = spv.actual - spv.last_year;
+                    const growthPerc = calculatePerc(growthNom, spv.last_year);
+                    const achNom = spv.actual - spv.target;
+                    const achPerc = calculatePerc(spv.actual, spv.target);
 
                     return (
-                      <tr key={item.spv_id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
-                        <td className="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white border-r border-gray-100 dark:border-white/5">
-                          {item.spv_name}
-                        </td>
-                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5">{formatIDR(item.last_year)}</td>
-                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold text-brand-600">{formatIDR(item.actual)}</td>
-                        <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 ${growthNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(growthNom)}</td>
-                        <td className={`px-5 py-3 text-sm text-center border-r border-gray-100 dark:border-white/5 font-bold ${growthPerc < 0 ? 'text-error-600' : 'text-success-600'}`}>
-                          {growthPerc.toFixed(2)}%
-                        </td>
-                        <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5">{formatIDR(item.target)}</td>
-                        <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold ${achNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(achNom)}</td>
-                        <td className={`px-5 py-3 text-sm text-center font-bold ${achPerc >= 100 ? 'text-success-600' : achPerc >= 80 ? 'text-amber-500' : 'text-error-600'}`}>
-                          {achPerc.toFixed(2)}%
-                        </td>
-                      </tr>
+                      <>
+                        {/* SPV Summary Row (Only displays Name/Chevron, totals are empty) */}
+                        <tr
+                          key={`spv-${spv.spv_id}`}
+                          onClick={() => {
+                            setExpandedSpv(prev => {
+                              const next = new Set(prev);
+                              if (next.has(spv.spv_id)) next.delete(spv.spv_id);
+                              else next.add(spv.spv_id);
+                              return next;
+                            });
+                          }}
+                          className="cursor-pointer bg-brand-50/70 dark:bg-brand-500/5 border-t-2 border-brand-200 dark:border-brand-500/30 hover:bg-brand-100/70 dark:hover:bg-brand-500/10 transition-colors"
+                        >
+                          <td className="px-4 py-3 border-r border-gray-200 dark:border-white/5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-brand-600 dark:text-brand-400 flex-shrink-0">
+                                {isExpanded
+                                  ? <ChevronDownIcon className="w-4 h-4" />
+                                  : <AngleRightIcon className="w-4 h-4" />}
+                              </span>
+                              <div>
+                                <p className="text-sm font-bold text-brand-700 dark:text-brand-300">{spv.spv_name}</p>
+                                <p className="text-xs text-brand-500 dark:text-brand-400">{spv.departments.length} departemen</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3"></td>
+                        </tr>
+
+                        {/* Department Sub-rows */}
+                        {isExpanded && spv.departments.map((dept) => {
+                          const dGrowthNom = dept.actual - dept.last_year;
+                          const dGrowthPerc = calculatePerc(dGrowthNom, dept.last_year);
+                          const dAchNom = dept.actual - dept.target;
+                          const dAchPerc = calculatePerc(dept.actual, dept.target);
+
+                          return (
+                            <tr
+                              key={`dept-${dept.dept_id}`}
+                              className="bg-white dark:bg-white/[0.01] hover:bg-gray-50 dark:hover:bg-white/[0.03] border-b border-gray-100 dark:border-white/5"
+                            >
+                              <td className="pl-12 pr-5 py-2.5 border-r border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1 h-4 rounded-full bg-brand-300 dark:bg-brand-600 flex-shrink-0"></span>
+                                  <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">{dept.dept_name}</span>
+                                </div>
+                              </td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 text-gray-500">{formatIDR(dept.last_year)}</td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 font-semibold text-gray-800 dark:text-gray-200">{formatIDR(dept.actual)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 ${dGrowthNom < 0 ? 'text-error-500' : 'text-success-500'}`}>{formatIDR(dGrowthNom)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-center border-r border-gray-100 dark:border-white/5 font-semibold ${dGrowthPerc < 0 ? 'text-error-500' : 'text-success-500'}`}>
+                                {dGrowthPerc.toFixed(2)}%
+                              </td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 text-gray-500">{formatIDR(dept.target)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 ${dAchNom < 0 ? 'text-error-500' : 'text-success-500'}`}>{formatIDR(dAchNom)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-center font-semibold ${
+                                dAchPerc >= 100 ? 'text-success-500' : dAchPerc >= 80 ? 'text-amber-500' : 'text-error-500'
+                              }`}>
+                                {dAchPerc.toFixed(2)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {/* SPV Accumulation Row (Placed below the departments) */}
+                        {isExpanded && (
+                          <tr className="bg-gray-50 dark:bg-white/[0.02] border-b-2 border-brand-200 dark:border-brand-500/30 font-bold">
+                            <td className="pl-8 pr-5 py-3 text-sm border-r border-gray-100 dark:border-white/5 text-brand-700 dark:text-brand-300">
+                              Akumulasi - {spv.spv_name}
+                            </td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400">{formatIDR(spv.last_year)}</td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-brand-600 dark:text-brand-400">{formatIDR(spv.actual)}</td>
+                            <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 ${growthNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(growthNom)}</td>
+                            <td className={`px-5 py-3 text-sm text-center border-r border-gray-100 dark:border-white/5 font-bold ${growthPerc < 0 ? 'text-error-600' : 'text-success-600'}`}>
+                              {growthPerc.toFixed(2)}%
+                            </td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400">{formatIDR(spv.target)}</td>
+                            <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold ${achNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(achNom)}</td>
+                            <td className={`px-5 py-3 text-sm text-center font-bold ${achPerc >= 100 ? 'text-success-600' : achPerc >= 80 ? 'text-amber-500' : 'text-error-600'}`}>
+                              {achPerc.toFixed(2)}%
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
-                  {/* Total for SPV Table */}
-                  <tr className="bg-gray-100 dark:bg-white/[0.03] text-gray-900 dark:text-white font-bold">
-                     <td className="px-5 py-3 text-sm border-r border-gray-200 dark:border-white/5 uppercase">Total Akumulasi</td>
-                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.ly)}</td>
-                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5 text-brand-600">{formatIDR(totals.actual)}</td>
-                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.actual - totals.ly)}</td>
-                     <td className={`px-5 py-3 text-sm text-center border-r border-gray-200 dark:border-white/5 font-bold ${(totals.actual - totals.ly) < 0 ? 'text-error-600' : 'text-success-600'}`}>
+
+                  {/* Grand Total Row */}
+                  <tr className="bg-brand-600 text-white font-bold">
+                     <td className="px-5 py-3.5 text-sm border-r border-white/20 uppercase tracking-wide">Total Keseluruhan</td>
+                     <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.ly)}</td>
+                     <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual)}</td>
+                     <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual - totals.ly)}</td>
+                     <td className={`px-5 py-3.5 text-sm text-center border-r border-white/20 font-bold ${(totals.actual - totals.ly) < 0 ? 'text-red-200' : 'text-green-200'}`}>
                         {calculatePerc(totals.actual - totals.ly, totals.ly).toFixed(2)}%
                      </td>
-                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.target)}</td>
-                     <td className="px-5 py-3 text-sm text-right border-r border-gray-200 dark:border-white/5">{formatIDR(totals.actual - totals.target)}</td>
-                     <td className={`px-5 py-3 text-sm text-center font-black ${calculatePerc(totals.actual, totals.target) >= 100 ? 'text-success-600' : 'text-error-600'}`}>
+                     <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.target)}</td>
+                     <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual - totals.target)}</td>
+                     <td className={`px-5 py-3.5 text-sm text-center font-black ${calculatePerc(totals.actual, totals.target) >= 100 ? 'text-green-200' : 'text-red-200'}`}>
                         {calculatePerc(totals.actual, totals.target).toFixed(2)}%
                      </td>
                   </tr>

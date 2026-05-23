@@ -217,7 +217,7 @@ export default function WaqafMemberReport() {
             <TableHeader className="bg-brand-500 text-white">
               <TableRow>
                 <TableCell isHeader rowSpan={2} className="px-5 py-4 text-white align-middle">Store Associate</TableCell>
-                {profile?.role === 'store_manager' && <TableCell isHeader rowSpan={2} className="px-5 py-4 text-white align-middle">Supervisor</TableCell>}
+                {(profile?.role === 'store_manager' || profile?.role === 'supervisor') && <TableCell isHeader rowSpan={2} className="px-5 py-4 text-white align-middle">Supervisor</TableCell>}
                 <TableCell isHeader colSpan={2} className="px-5 py-2 text-center border-b border-white/20 text-white">Pencapaian Waqaf</TableCell>
                 <TableCell isHeader colSpan={2} className="px-5 py-2 text-center border-b border-white/20 text-white">Pencapaian MyValue Member</TableCell>
               </TableRow>
@@ -250,7 +250,7 @@ export default function WaqafMemberReport() {
                             <span className="font-bold text-gray-800 dark:text-gray-200">{item.sa_name}</span>
                          </div>
                       </TableCell>
-                      {profile?.role === 'store_manager' && <TableCell className="px-5 py-4 text-sm text-gray-500 font-medium">{item.spv_name}</TableCell>}
+                      {(profile?.role === 'store_manager' || profile?.role === 'supervisor') && <TableCell className="px-5 py-4 text-sm text-gray-500 font-medium">{item.spv_name}</TableCell>}
                       
                       <TableCell className="px-5 py-4 min-w-[200px]">
                         <div className="flex flex-col gap-1.5">

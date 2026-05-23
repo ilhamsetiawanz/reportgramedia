@@ -89,22 +89,34 @@ export default function Home() {
           if (deptIds.length > 0) {
               revQ = revQ.in('department_id', deptIds);
               pendQ = pendQ.in('department_id', deptIds);
-
-              const { data: saAssignments } = await supabase.from('monthly_assignments')
-                  .select('sa_id')
-                  .in('department_id', deptIds)
-                  .eq('month', now.getMonth() + 1)
-                  .eq('year', now.getFullYear());
-              
-              const saIds = saAssignments?.map(a => a.sa_id).filter(Boolean) || [];
-              if (saIds.length > 0) {
-                  waqQ = waqQ.in('sa_id', saIds);
-              } else {
-                  waqQ = waqQ.eq('id', 'dummy'); 
-              }
           } else {
               revQ = revQ.eq('id', 'dummy');
               pendQ = pendQ.eq('id', 'dummy');
+          }
+
+          // Fetch SA IDs: from monthly_assignments AND direct supervisor relationship
+          const [saFromAssignRes, directSAsRes] = await Promise.all([
+            supabase.from('monthly_assignments')
+              .select('sa_id')
+              .eq('supervisor_id', profile?.id)
+              .eq('month', now.getMonth() + 1)
+              .eq('year', now.getFullYear())
+              .not('sa_id', 'is', null),
+            supabase.from('users')
+              .select('id')
+              .eq('supervisor_id', profile?.id)
+              .eq('role', 'store_associate')
+              .eq('is_approved', true)
+          ]);
+
+          const saIds = Array.from(new Set([
+            ...(saFromAssignRes.data?.map(a => a.sa_id).filter(Boolean) || []),
+            ...(directSAsRes.data?.map(u => u.id) || [])
+          ]));
+
+          if (saIds.length > 0) {
+              waqQ = waqQ.in('sa_id', saIds);
+          } else {
               waqQ = waqQ.eq('id', 'dummy');
           }
         } else if (role === 'store_associate') {
@@ -394,12 +406,13 @@ ${deptDetail}
         {/* === SM / SPV ROLE === */}
         {(role === 'store_manager' || role === 'supervisor') && (
           <>
-            <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hasCounter ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hasCounter ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
               <StatCard title="Omset Departemen" value={`Rp ${stats.deptRevenue.toLocaleString('id-ID')}`} color="blue" />
               {hasCounter && (
                 <StatCard title="Omset Counter" value={`Rp ${stats.counterRevenue.toLocaleString('id-ID')}`} color="green" />
               )}
               <StatCard title="Total Waqaf" value={`Rp ${stats.totalWaqaf.toLocaleString('id-ID')}`} color="purple" />
+              <StatCard title="Total MyValue" value={`${stats.totalMembers} Member`} color="green" />
               <StatCard title="Pending Verif" value={`${stats.pendingVerifications} Data`} color="orange" />
             </div>
 

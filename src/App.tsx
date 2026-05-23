@@ -157,8 +157,8 @@ export default function App() {
           {/* Reports (Accessible by SM, SPV, SA based on specific report) */}
           <Route path="/reports/daily" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><DailyReport /></ProtectedRoute>} />
           <Route path="/reports/daily-recap" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "store_associate"]}><DailyRecap /></ProtectedRoute>} />
-          <Route path="/reports/monthly" element={<ProtectedRoute allowedRoles={["store_manager", "store_associate"]}><MonthlyReport /></ProtectedRoute>} />
-          <Route path="/reports/waqaf-member" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><WaqafMemberReport /></ProtectedRoute>} />
+          <Route path="/reports/monthly" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "store_associate"]}><MonthlyReport /></ProtectedRoute>} />
+          <Route path="/reports/waqaf-member" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor", "store_associate"]}><WaqafMemberReport /></ProtectedRoute>} />
           <Route path="/reports/dept" element={<ProtectedRoute allowedRoles={["supervisor"]}><MonthlyReport /></ProtectedRoute>} />
           <Route path="/reports/activities" element={<ProtectedRoute allowedRoles={["supervisor"]}><ActivityReport /></ProtectedRoute>} />
           <Route path="/reports/event-participants" element={<ProtectedRoute allowedRoles={["store_manager", "supervisor"]}><EventParticipantReport /></ProtectedRoute>} />
