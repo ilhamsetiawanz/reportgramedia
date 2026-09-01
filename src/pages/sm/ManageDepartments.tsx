@@ -51,6 +51,12 @@ export default function ManageDepartments() {
   const [supervisors, setSupervisors] = useState<{ id: string, full_name: string }[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string>>({}); // deptId -> spvId
   const [monthlyTargets, setMonthlyTargets] = useState<Record<string, number>>({});
+  const [lastYearTargets, setLastYearTargets] = useState<Record<string, number>>({});
+
+  // Target State
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [targetDept, setTargetDept] = useState<Department | null>(null);
+  const [targetForm, setTargetForm] = useState({ target_amount: 0, last_year_amount: 0 });
 
   // CRUD State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -92,7 +98,7 @@ export default function ManageDepartments() {
       // Fetch current month targets
       const { data: targetData, error: targetError } = await supabase
         .from("monthly_targets")
-        .select("department_id, target_amount")
+        .select("department_id, target_amount, last_year_amount")
         .eq("year", selectedYear)
         .eq("month", selectedMonth);
 
@@ -114,10 +120,13 @@ export default function ManageDepartments() {
       setAssignments(deptAssignMap);
 
       const targetMap: Record<string, number> = {};
+      const lastYearMap: Record<string, number> = {};
       targetData?.forEach(t => {
         targetMap[t.department_id] = t.target_amount;
+        lastYearMap[t.department_id] = t.last_year_amount || 0;
       });
       setMonthlyTargets(targetMap);
+      setLastYearTargets(lastYearMap);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -230,6 +239,37 @@ export default function ManageDepartments() {
     }
   }
 
+  const openTargetModal = (dept: Department) => {
+    setTargetDept(dept);
+    setTargetForm({
+      target_amount: monthlyTargets[dept.id] || 0,
+      last_year_amount: lastYearTargets[dept.id] || 0
+    });
+    setIsTargetModalOpen(true);
+  };
+
+  async function handleSaveTarget(e: React.FormEvent) {
+    e.preventDefault();
+    if (!targetDept) return;
+    try {
+      const { error } = await supabase
+        .from("monthly_targets")
+        .upsert({
+          department_id: targetDept.id,
+          year: selectedYear,
+          month: selectedMonth,
+          target_amount: targetForm.target_amount,
+          last_year_amount: targetForm.last_year_amount
+        }, { onConflict: 'department_id,month,year' });
+
+      if (error) throw error;
+      setIsTargetModalOpen(false);
+      fetchData();
+    } catch (error) {
+      alert("Gagal menyimpan target: " + (error as any).message);
+    }
+  }
+
 
   return (
     <>
@@ -275,7 +315,7 @@ export default function ManageDepartments() {
                   <TableCell isHeader className="px-5 py-3 text-start">Nama Departemen</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Supervisor</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Status</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start">Target Bulan Ini</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start">Target & Omset</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
                 </TableRow>
               </TableHeader>
@@ -316,12 +356,20 @@ export default function ManageDepartments() {
                         </button>
                       </TableCell>
                       <TableCell className="px-5 py-4">
-                        <Badge size="sm" color="primary">
-                          Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-gray-500">Bulan ini:</span>
+                          <Badge size="sm" color="primary">
+                            Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
+                          </Badge>
+                          <span className="text-xs text-gray-500 mt-1">Thn Lalu:</span>
+                          <Badge size="sm" color="success">
+                            Rp {lastYearTargets[dept.id]?.toLocaleString() || "0"}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="px-5 py-4 text-end">
                         <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openTargetModal(dept)}>Set Target</Button>
                           <button onClick={() => openEditModal(dept)} className="text-gray-500 hover:text-brand-500 transition-colors"><PencilIcon className="size-5" /></button>
                           <button onClick={() => handleDeleteDepartment(dept.id, dept.name)} className="text-gray-500 hover:text-error-500 transition-colors"><TrashBinIcon className="size-5" /></button>
                         </div>
@@ -405,8 +453,34 @@ export default function ManageDepartments() {
             required
           />
           <div className="flex justify-end gap-3 mt-6">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
+            <Button variant="outline" type="button" onClick={() => setIsEditModalOpen(false)}>Batal</Button>
             <Button type="submit">Simpan Perubahan</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Target Modal */}
+      <Modal isOpen={isTargetModalOpen} onClose={() => setIsTargetModalOpen(false)} className="max-w-[500px] p-8">
+        <h2 className="mb-6 text-lg font-bold text-gray-900 dark:text-white">Atur Target ({targetDept?.name})</h2>
+        <p className="text-sm text-gray-500 mb-4">Periode: {selectedMonth}/{selectedYear}</p>
+        <form onSubmit={handleSaveTarget} className="space-y-4">
+          <InputField
+            label="Target Bulan Ini (Rp)"
+            type="number"
+            value={targetForm.target_amount}
+            onChange={(e) => setTargetForm({ ...targetForm, target_amount: parseFloat(e.target.value) || 0 })}
+            required
+          />
+          <InputField
+            label="Omset Tahun Lalu (Rp)"
+            type="number"
+            value={targetForm.last_year_amount}
+            onChange={(e) => setTargetForm({ ...targetForm, last_year_amount: parseFloat(e.target.value) || 0 })}
+            required
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" type="button" onClick={() => setIsTargetModalOpen(false)}>Batal</Button>
+            <Button type="submit">Simpan Target</Button>
           </div>
         </form>
       </Modal>
