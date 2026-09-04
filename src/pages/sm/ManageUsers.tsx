@@ -18,6 +18,10 @@ export default function ManageUsers() {
   const [supervisors, setSupervisors] = useState<UserProfile[]>([]);
   const [counters, setCounters] = useState<{ id: string, name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filter State
+  const [roleFilter, setRoleFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
   
   // Edit State
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -171,7 +175,45 @@ export default function ManageUsers() {
       <PageMeta title="Kelola User | Gramedia Tracker" description="Manajemen pendaftaran, role, dan edit data staff" />
       
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daftar Pengguna</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daftar Pengguna</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Cari nama / email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-3 w-44 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 dark:text-white/90 outline-none text-xs focus:border-brand-500"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {/* Role Filter */}
+            <select
+              className="h-9 px-3 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs focus:border-brand-500"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+            >
+              <option value="">Semua Role</option>
+              <option value="store_manager">Store Manager</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="store_associate">Store Associate</option>
+              <option value="counter">Counter</option>
+            </select>
+          </div>
+        </div>
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
           <div className="max-w-full overflow-x-auto">
@@ -190,12 +232,26 @@ export default function ManageUsers() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-10 text-gray-400">Memuat user...</TableCell>
                   </TableRow>
-                ) : users.length === 0 ? (
+                ) : users.filter(u =>
+                    (roleFilter === "" || u.role === roleFilter) &&
+                    (searchQuery === "" ||
+                      u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (u.email || "").toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                  ).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-gray-400 font-medium">Belum ada user terdaftar.</TableCell>
+                    <TableCell colSpan={5} className="text-center py-10 text-gray-400 font-medium">
+                      {roleFilter || searchQuery ? "Tidak ada user yang cocok dengan filter." : "Belum ada user terdaftar."}
+                    </TableCell>
                   </TableRow>
                 ) : (
-                  users.map((user) => (
+                  users.filter(u =>
+                    (roleFilter === "" || u.role === roleFilter) &&
+                    (searchQuery === "" ||
+                      u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (u.email || "").toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                  ).map((user) => (
                     <TableRow key={user.id} className={user.is_active ? "" : "opacity-50"}>
                       <TableCell className="px-5 py-4">
                         <div className="flex flex-col">

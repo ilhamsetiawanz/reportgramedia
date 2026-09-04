@@ -79,6 +79,9 @@ export default function ManageDepartments() {
   const [isOther, setIsOther] = useState(false);
   const [customName, setCustomName] = useState("");
 
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -334,12 +337,37 @@ export default function ManageDepartments() {
       <PageMeta title="Kelola Departemen | Gramedia Tracker" description="Manajemen departemen dan target bulanan" />
 
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daftar Departemen</h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm italic">Periode: {selectedMonth}/{selectedYear}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search Input */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Cari nama / kode dept..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pl-9 pr-3 w-52 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 dark:text-white/90 outline-none text-xs focus:border-brand-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <select
               className="h-9 px-2 border border-gray-300 rounded-lg dark:bg-gray-900 dark:border-gray-800 outline-none text-xs"
               value={selectedMonth}
@@ -382,12 +410,20 @@ export default function ManageDepartments() {
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-10 text-gray-400">Memuat data...</TableCell>
                   </TableRow>
-                ) : departments.length === 0 ? (
+                ) : departments.filter(d =>
+                    d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    d.code.toLowerCase().includes(searchQuery.toLowerCase())
+                  ).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-10 text-gray-400 font-medium">Belum ada departemen.</TableCell>
+                    <TableCell colSpan={6} className="text-center py-10 text-gray-400 font-medium">
+                      {searchQuery ? `Tidak ditemukan departemen "${searchQuery}".` : "Belum ada departemen."}
+                    </TableCell>
                   </TableRow>
                 ) : (
-                  departments.map((dept) => {
+                  departments.filter(d =>
+                    d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    d.code.toLowerCase().includes(searchQuery.toLowerCase())
+                  ).map((dept) => {
                     const assignedSpvId = assignments[dept.id] || "";
                     const assignedSaId = saAssignments[dept.id] || "";
                     const availableSAs = assignedSpvId ? (sasBySpv[assignedSpvId] || []) : [];
