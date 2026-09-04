@@ -41,6 +41,11 @@ interface Department {
   users?: { full_name: string }; // Join relation
 }
 
+interface SAUser {
+  id: string;
+  full_name: string;
+}
+
 export default function ManageDepartments() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,7 +54,14 @@ export default function ManageDepartments() {
   // Form State
   const [newDept, setNewDept] = useState({ name: "", code: "" });
   const [supervisors, setSupervisors] = useState<{ id: string, full_name: string }[]>([]);
-  const [assignments, setAssignments] = useState<Record<string, string>>({}); // deptId -> spvId
+
+  // SPV assignments: deptId → spvId
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  // SOA assignments: deptId → saId
+  const [saAssignments, setSaAssignments] = useState<Record<string, string>>({});
+  // SA list per SPV: spvId → SA[]
+  const [sasBySpv, setSasBySpv] = useState<Record<string, SAUser[]>>({});
+
   const [monthlyTargets, setMonthlyTargets] = useState<Record<string, number>>({});
   const [lastYearTargets, setLastYearTargets] = useState<Record<string, number>>({});
 
@@ -112,12 +124,34 @@ export default function ManageDepartments() {
         .eq("month", selectedMonth);
 
       const deptAssignMap: Record<string, string> = {};
+      const deptSaMap: Record<string, string> = {};
       assignData?.forEach(a => {
         if (a.department_id && a.supervisor_id) {
           deptAssignMap[a.department_id] = a.supervisor_id;
         }
+        if (a.department_id && a.sa_id) {
+          deptSaMap[a.department_id] = a.sa_id;
+        }
       });
       setAssignments(deptAssignMap);
+      setSaAssignments(deptSaMap);
+
+      // Fetch all active SAs and group by supervisor_id
+      const { data: saData } = await supabase
+        .from("users")
+        .select("id, full_name, supervisor_id")
+        .eq("role", "store_associate")
+        .eq("is_approved", true)
+        .eq("is_active", true);
+
+      const spvSaMap: Record<string, SAUser[]> = {};
+      saData?.forEach(sa => {
+        if (sa.supervisor_id) {
+          if (!spvSaMap[sa.supervisor_id]) spvSaMap[sa.supervisor_id] = [];
+          spvSaMap[sa.supervisor_id].push({ id: sa.id, full_name: sa.full_name });
+        }
+      });
+      setSasBySpv(spvSaMap);
 
       const targetMap: Record<string, number> = {};
       const lastYearMap: Record<string, number> = {};
@@ -159,7 +193,7 @@ export default function ManageDepartments() {
     }
   }
 
-  // --- NEW CRUD FUNCTIONS ---
+  // --- CRUD FUNCTIONS ---
 
   const openEditModal = (dept: Department) => {
     setEditingDept(dept);
@@ -217,7 +251,6 @@ export default function ManageDepartments() {
     }
   }
 
-
   async function handleUpdateSPV(deptId: string, spvId: string) {
     try {
       const { error } = await supabase
@@ -225,17 +258,42 @@ export default function ManageDepartments() {
         .upsert({
           department_id: deptId,
           supervisor_id: spvId || null,
+          sa_id: null, // Reset SOA when SPV changes
           year: selectedYear,
           month: selectedMonth
         }, { onConflict: 'department_id,month,year' });
 
       if (error) throw error;
 
+      // Reset SOA assignment for this dept locally
       setAssignments(prev => ({ ...prev, [deptId]: spvId }));
-      alert("Penugasan SPV berhasil disimpan!");
+      setSaAssignments(prev => ({ ...prev, [deptId]: "" }));
     } catch (error: any) {
       console.error("Error updating SPV:", error);
       alert("Gagal update SPV: " + error.message);
+    }
+  }
+
+  async function handleUpdateSOA(deptId: string, saId: string) {
+    try {
+      const currentSpvId = assignments[deptId] || null;
+
+      const { error } = await supabase
+        .from("monthly_assignments")
+        .upsert({
+          department_id: deptId,
+          supervisor_id: currentSpvId,
+          sa_id: saId || null,
+          year: selectedYear,
+          month: selectedMonth
+        }, { onConflict: 'department_id,month,year' });
+
+      if (error) throw error;
+
+      setSaAssignments(prev => ({ ...prev, [deptId]: saId }));
+    } catch (error: any) {
+      console.error("Error updating SOA:", error);
+      alert("Gagal update SOA: " + error.message);
     }
   }
 
@@ -313,7 +371,7 @@ export default function ManageDepartments() {
                 <TableRow>
                   <TableCell isHeader className="px-5 py-3 text-start">Kode</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Nama Departemen</TableCell>
-                  <TableCell isHeader className="px-5 py-3 text-start">Supervisor</TableCell>
+                  <TableCell isHeader className="px-5 py-3 text-start">Penugasan (SPV & SOA)</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Status</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-start">Target & Omset</TableCell>
                   <TableCell isHeader className="px-5 py-3 text-end text-theme-xs">Aksi</TableCell>
@@ -329,53 +387,96 @@ export default function ManageDepartments() {
                     <TableCell colSpan={6} className="text-center py-10 text-gray-400 font-medium">Belum ada departemen.</TableCell>
                   </TableRow>
                 ) : (
-                  departments.map((dept) => (
-                    <TableRow key={dept.id}>
-                      <TableCell className="px-5 py-4 font-bold text-brand-600">{dept.code}</TableCell>
-                      <TableCell className="px-5 py-4 text-gray-800 dark:text-white/90">{dept.name}</TableCell>
-                      <TableCell className="px-5 py-4 min-w-[200px]">
-                        <select
-                          className="h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
-                          value={assignments[dept.id] || ""}
-                          onChange={(e) => handleUpdateSPV(dept.id, e.target.value)}
-                        >
-                          <option value="">-- Plot SPV --</option>
-                          {supervisors.map(spv => (
-                            <option key={spv.id} value={spv.id}>{spv.full_name}</option>
-                          ))}
-                        </select>
-                      </TableCell>
-                      <TableCell className="px-5 py-4">
-                        <button
-                          onClick={() => toggleDeptStatus(dept)}
-                          className="focus:outline-none"
-                        >
-                          <Badge size="sm" color={dept.is_active ? "success" : "error"}>
-                            {dept.is_active ? "Aktif" : "Nonaktif"}
-                          </Badge>
-                        </button>
-                      </TableCell>
-                      <TableCell className="px-5 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs text-gray-500">Bulan ini:</span>
-                          <Badge size="sm" color="primary">
-                            Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
-                          </Badge>
-                          <span className="text-xs text-gray-500 mt-1">Thn Lalu:</span>
-                          <Badge size="sm" color="success">
-                            Rp {lastYearTargets[dept.id]?.toLocaleString() || "0"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-5 py-4 text-end">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => openTargetModal(dept)}>Set Target</Button>
-                          <button onClick={() => openEditModal(dept)} className="text-gray-500 hover:text-brand-500 transition-colors"><PencilIcon className="size-5" /></button>
-                          <button onClick={() => handleDeleteDepartment(dept.id, dept.name)} className="text-gray-500 hover:text-error-500 transition-colors"><TrashBinIcon className="size-5" /></button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  departments.map((dept) => {
+                    const assignedSpvId = assignments[dept.id] || "";
+                    const assignedSaId = saAssignments[dept.id] || "";
+                    const availableSAs = assignedSpvId ? (sasBySpv[assignedSpvId] || []) : [];
+
+                    return (
+                      <TableRow key={dept.id}>
+                        <TableCell className="px-5 py-4 font-bold text-brand-600">{dept.code}</TableCell>
+                        <TableCell className="px-5 py-4 text-gray-800 dark:text-white/90">{dept.name}</TableCell>
+                        <TableCell className="px-5 py-4 min-w-[260px]">
+                          <div className="flex flex-col gap-2">
+                            {/* SPV Dropdown */}
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                Supervisor (SPV)
+                              </span>
+                              <select
+                                className="h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                                value={assignedSpvId}
+                                onChange={(e) => handleUpdateSPV(dept.id, e.target.value)}
+                              >
+                                <option value="">-- Plot SPV --</option>
+                                {supervisors.map(spv => (
+                                  <option key={spv.id} value={spv.id}>{spv.full_name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* SOA Dropdown — only shown when SPV is assigned */}
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                Store Associate (SOA)
+                              </span>
+                              {assignedSpvId ? (
+                                availableSAs.length > 0 ? (
+                                  <select
+                                    className="h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-brand-500 dark:bg-gray-900 dark:border-gray-800 dark:text-white/90"
+                                    value={assignedSaId}
+                                    onChange={(e) => handleUpdateSOA(dept.id, e.target.value)}
+                                  >
+                                    <option value="">-- Plot SOA --</option>
+                                    {availableSAs.map(sa => (
+                                      <option key={sa.id} value={sa.id}>{sa.full_name}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="text-xs text-amber-500 italic">
+                                    SPV ini belum memiliki SA aktif
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs text-gray-400 italic">
+                                  Pilih SPV terlebih dahulu
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-5 py-4">
+                          <button
+                            onClick={() => toggleDeptStatus(dept)}
+                            className="focus:outline-none"
+                          >
+                            <Badge size="sm" color={dept.is_active ? "success" : "error"}>
+                              {dept.is_active ? "Aktif" : "Nonaktif"}
+                            </Badge>
+                          </button>
+                        </TableCell>
+                        <TableCell className="px-5 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-gray-500">Bulan ini:</span>
+                            <Badge size="sm" color="primary">
+                              Rp {monthlyTargets[dept.id]?.toLocaleString() || "0"}
+                            </Badge>
+                            <span className="text-xs text-gray-500 mt-1">Thn Lalu:</span>
+                            <Badge size="sm" color="success">
+                              Rp {lastYearTargets[dept.id]?.toLocaleString() || "0"}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-5 py-4 text-end">
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => openTargetModal(dept)}>Set Target</Button>
+                            <button onClick={() => openEditModal(dept)} className="text-gray-500 hover:text-brand-500 transition-colors"><PencilIcon className="size-5" /></button>
+                            <button onClick={() => handleDeleteDepartment(dept.id, dept.name)} className="text-gray-500 hover:text-error-500 transition-colors"><TrashBinIcon className="size-5" /></button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
