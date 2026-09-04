@@ -632,7 +632,7 @@ export default function MonthlyReport() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-brand-600 text-white">
-                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-white/20 min-w-[220px]">Supervisor / Departemen</th>
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-white/20 min-w-[220px]">SS / Departemen</th>
                     <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Omset</th>
                     <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Growth</th>
                     <th rowSpan={2} className="px-5 py-4 text-sm font-bold text-center border-r border-white/20">Target {year}</th>
