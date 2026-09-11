@@ -17,6 +17,7 @@ interface MonthlyData {
   target: number;
   last_year: number;
   spv_id?: string;
+  sa_id?: string;
 }
 
 interface DeptInSpv {
@@ -37,10 +38,21 @@ interface SpvMonthlyData {
   departments: DeptInSpv[];
 }
 
+interface SaMonthlyData {
+  sa_id: string;
+  sa_name: string;
+  actual: number;
+  target: number;
+  last_year: number;
+  departments: DeptInSpv[];
+}
+
 export default function MonthlyReport() {
   const [data, setData] = useState<MonthlyData[]>([]);
   const [spvData, setSpvData] = useState<SpvMonthlyData[]>([]);
+  const [saData, setSaData] = useState<SaMonthlyData[]>([]);
   const [expandedSpv, setExpandedSpv] = useState<Set<string>>(new Set());
+  const [expandedSa, setExpandedSa] = useState<Set<string>>(new Set());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [isLoading, setIsLoading] = useState(false);
@@ -131,7 +143,8 @@ export default function MonthlyReport() {
           actual: actualAmount,
           target: targetObj?.target_amount || 0,
           last_year: targetObj?.last_year_amount || 0,
-          spv_id: spvAssignment?.supervisor_id
+          spv_id: spvAssignment?.supervisor_id,
+          sa_id: spvAssignment?.sa_id
         };
       });
 
@@ -181,6 +194,38 @@ export default function MonthlyReport() {
         setSpvData(finalSpvData.sort((a, b) => b.actual - a.actual));
         // Auto-expand all SPVs by default
         setExpandedSpv(new Set(finalSpvData.map(s => s.spv_id)));
+        // Process SA Data for SM (Rekap berdasarkan SOA)
+        const saMap: Record<string, SaMonthlyData> = {};
+        processed.forEach(d => {
+          const sId = d.sa_id || "UNASSIGNED";
+          if (!saMap[sId]) {
+            const saInfo = storeAssociates?.find(s => s.id === sId);
+            saMap[sId] = {
+              sa_id: sId,
+              sa_name: saInfo ? saInfo.full_name : "Belum Diplot (Unassigned)",
+              actual: 0,
+              target: 0,
+              last_year: 0,
+              departments: []
+            };
+          }
+          saMap[sId].actual += d.actual;
+          saMap[sId].target += d.target;
+          saMap[sId].last_year += d.last_year;
+          saMap[sId].departments.push({
+            dept_id: d.dept_id,
+            dept_name: d.dept_name,
+            actual: d.actual,
+            target: d.target,
+            last_year: d.last_year,
+            sa_name: saMap[sId].sa_name
+          });
+        });
+
+        const finalSaData = Object.values(saMap).filter(s => s.actual > 0 || s.target > 0 || s.last_year > 0);
+        finalSaData.forEach(s => s.departments.sort((a, b) => b.actual - a.actual));
+        setSaData(finalSaData.sort((a, b) => b.actual - a.actual));
+        setExpandedSa(new Set(finalSaData.map(s => s.sa_id)));
       }
 
     } catch (error) {
@@ -274,7 +319,7 @@ export default function MonthlyReport() {
     const monthName = new Date(0, month - 1).toLocaleString('id-ID', { month: 'long' });
 
     doc.setFontSize(16);
-    doc.text(`Laporan Bulanan Per Supervisor - Gramedia Kendari`, 14, 15);
+    doc.text(`Laporan Bulanan Per Team - Gramedia Kendari`, 14, 15);
     doc.setFontSize(12);
     doc.text(`Periode: ${monthName} ${year}`, 14, 22);
 
@@ -385,6 +430,105 @@ export default function MonthlyReport() {
     doc.save(`Laporan_Bulanan_SPV_${monthName}_${year}.pdf`);
   };
 
+  const exportSaPDF = () => {
+    const doc = new jsPDF('l', 'mm', 'a4');
+    const monthName = new Date(0, month - 1).toLocaleString('id-ID', { month: 'long' });
+
+    doc.setFontSize(16);
+    doc.text(`Laporan Bulanan per SOA - Gramedia Kendari`, 14, 15);
+    doc.setFontSize(12);
+    doc.text(`Periode: ${monthName} ${year}`, 14, 22);
+
+    const tableColumn = ["SOA / Departemen", `Omset ${year - 1}`, `Omset ${year}`, "Growth (Nom)", "Growth (%)", `Target ${year}`, "Ach (Nom)", "Ach (%)"];
+    const tableRows: any[] = [];
+    const rowTypes: ('sa_header' | 'dept' | 'sa_total' | 'grand_total')[] = [];
+
+    saData.forEach(sa => {
+      tableRows.push([sa.sa_name, "", "", "", "", "", "", ""]);
+      rowTypes.push('sa_header');
+
+      sa.departments.forEach(dept => {
+        const dGrowthNom = dept.actual - dept.last_year;
+        const dGrowthPerc = calculatePerc(dGrowthNom, dept.last_year);
+        const dAchNom = dept.actual - dept.target;
+        const dAchPerc = calculatePerc(dept.actual, dept.target);
+
+        tableRows.push([
+          `   ${dept.dept_name}`,
+          formatIDR(dept.last_year),
+          formatIDR(dept.actual),
+          formatIDR(dGrowthNom),
+          `${dGrowthPerc.toFixed(2)}%`,
+          formatIDR(dept.target),
+          formatIDR(dAchNom),
+          `${dAchPerc.toFixed(2)}%`
+        ]);
+        rowTypes.push('dept');
+      });
+
+      const saGrowthNom = sa.actual - sa.last_year;
+      const saGrowthPerc = calculatePerc(saGrowthNom, sa.last_year);
+      const saAchNom = sa.actual - sa.target;
+      const saAchPerc = calculatePerc(sa.actual, sa.target);
+
+      tableRows.push([
+        `Akumulasi - ${sa.sa_name}`,
+        formatIDR(sa.last_year),
+        formatIDR(sa.actual),
+        formatIDR(saGrowthNom),
+        `${saGrowthPerc.toFixed(2)}%`,
+        formatIDR(sa.target),
+        formatIDR(saAchNom),
+        `${saAchPerc.toFixed(2)}%`
+      ]);
+      rowTypes.push('sa_total');
+    });
+
+    const grandGrowthNom = totals.actual - totals.ly;
+    const grandGrowthPerc = calculatePerc(grandGrowthNom, totals.ly);
+    const grandAchNom = totals.actual - totals.target;
+    const grandAchPerc = calculatePerc(totals.actual, totals.target);
+
+    tableRows.push([
+      "GRAND TOTAL",
+      formatIDR(totals.ly),
+      formatIDR(totals.actual),
+      formatIDR(grandGrowthNom),
+      `${grandGrowthPerc.toFixed(2)}%`,
+      formatIDR(totals.target),
+      formatIDR(grandAchNom),
+      `${grandAchPerc.toFixed(2)}%`
+    ]);
+    rowTypes.push('grand_total');
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 28,
+      theme: 'grid',
+      headStyles: { fillColor: [43, 86, 179] },
+      didParseCell: (data: any) => {
+        const rowIndex = data.row.index;
+        const type = rowTypes[rowIndex];
+
+        if (type === 'sa_header') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [224, 231, 255];
+          data.cell.styles.textColor = [30, 58, 138];
+        } else if (type === 'sa_total') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [243, 244, 246];
+        } else if (type === 'grand_total') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [43, 86, 179];
+          data.cell.styles.textColor = [255, 255, 255];
+        }
+      }
+    });
+
+    doc.save(`Laporan_Bulanan_SOA_${monthName}_${year}.pdf`);
+  };
+
   return (
     <>
       <PageMeta title="Laporan Bulanan | Gramedia Kendari Tracker" description="Analisa performa bulanan sesuai standar report Gramedia" />
@@ -421,7 +565,10 @@ export default function MonthlyReport() {
                   Export Summary PDF
                 </Button>
                 <Button variant="outline" size="sm" onClick={exportSpvPDF} disabled={spvData.length === 0}>
-                  Export SPV & SOA PDF
+                  Export SPV PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportSaPDF} disabled={saData.length === 0}>
+                  Export SOA PDF
                 </Button>
               </div>
             ) : (
@@ -529,7 +676,163 @@ export default function MonthlyReport() {
           </div>
         )}
 
+        {/* SA Table Section for SM (Rekap berdasarkan SOA) */}
+        {profile?.role === 'store_manager' && saData.length > 0 && !isLoading && (
+          <div className="mt-8 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Rekap Omset per SOA & Departemen</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Klik baris SOA untuk melihat/menyembunyikan detail departemen yang dipelotkan</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExpandedSa(new Set(saData.map(s => s.sa_id)))}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 font-medium hover:bg-brand-100 transition-colors"
+                >
+                  Buka Semua
+                </button>
+                <button
+                  onClick={() => setExpandedSa(new Set())}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-400 font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Tutup Semua
+                </button>
+                <Button variant="outline" size="sm" onClick={exportSaPDF} disabled={saData.length === 0}>
+                  Export PDF SOA
+                </Button>
+              </div>
+            </div>
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-brand-600 text-white">
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold border-r border-white/20 min-w-[220px]">SOA / Departemen</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Omset</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20 border-r border-white/20">Growth</th>
+                    <th rowSpan={2} className="px-5 py-4 text-sm font-bold text-center border-r border-white/20">Target {year}</th>
+                    <th colSpan={2} className="px-5 py-2 text-sm font-bold text-center border-b border-white/20">Achievement</th>
+                  </tr>
+                  <tr className="bg-brand-600 text-white">
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">{year - 1}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">{year}</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">Selisih</th>
+                    <th className="px-5 py-2 text-xs font-bold text-center border-r border-white/20">%</th>
+                    <th className="px-5 py-2 text-xs font-bold text-right border-r border-white/20">Selisih</th>
+                    <th className="px-5 py-2 text-xs font-bold text-center">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {saData.map((sa) => {
+                    const isExpanded = expandedSa.has(sa.sa_id);
+                    const growthNom = sa.actual - sa.last_year;
+                    const growthPerc = calculatePerc(growthNom, sa.last_year);
+                    const achNom = sa.actual - sa.target;
+                    const achPerc = calculatePerc(sa.actual, sa.target);
+
+                    return (
+                      <>
+                        <tr
+                          key={`sa-${sa.sa_id}`}
+                          onClick={() => {
+                            setExpandedSa(prev => {
+                              const next = new Set(prev);
+                              if (next.has(sa.sa_id)) next.delete(sa.sa_id);
+                              else next.add(sa.sa_id);
+                              return next;
+                            });
+                          }}
+                          className="cursor-pointer bg-brand-50/70 dark:bg-brand-500/5 border-t-2 border-brand-200 dark:border-brand-500/30 hover:bg-brand-100/70 dark:hover:bg-brand-500/10 transition-colors"
+                        >
+                          <td className="px-4 py-3 border-r border-gray-200 dark:border-white/5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-brand-600 dark:text-brand-400 flex-shrink-0">
+                                {isExpanded
+                                  ? <ChevronDownIcon className="w-4 h-4" />
+                                  : <AngleRightIcon className="w-4 h-4" />}
+                              </span>
+                              <div>
+                                <p className="text-sm font-bold text-brand-700 dark:text-brand-300">{sa.sa_name}</p>
+                                <p className="text-xs text-brand-500 dark:text-brand-400">{sa.departments.length} departemen</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3 border-r border-gray-200 dark:border-white/5"></td>
+                          <td className="px-5 py-3"></td>
+                        </tr>
+
+                        {isExpanded && sa.departments.map((dept) => {
+                          const dGrowthNom = dept.actual - dept.last_year;
+                          const dGrowthPerc = calculatePerc(dGrowthNom, dept.last_year);
+                          const dAchNom = dept.actual - dept.target;
+                          const dAchPerc = calculatePerc(dept.actual, dept.target);
+
+                          return (
+                            <tr
+                              key={`sa-dept-${dept.dept_id}`}
+                              className="bg-white dark:bg-white/[0.01] hover:bg-gray-50 dark:hover:bg-white/[0.03] border-b border-gray-100 dark:border-white/5"
+                            >
+                              <td className="pl-12 pr-5 py-2.5 border-r border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1 h-4 rounded-full bg-brand-300 dark:bg-brand-600 flex-shrink-0"></span>
+                                  <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">{dept.dept_name}</span>
+                                </div>
+                              </td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 text-gray-500">{formatIDR(dept.last_year)}</td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 font-semibold text-gray-800 dark:text-gray-200">{formatIDR(dept.actual)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 ${dGrowthNom < 0 ? 'text-error-500' : 'text-success-500'}`}>{formatIDR(dGrowthNom)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-center border-r border-gray-100 dark:border-white/5 font-semibold ${dGrowthPerc < 0 ? 'text-error-500' : 'text-success-500'}`}>{dGrowthPerc.toFixed(2)}%</td>
+                              <td className="px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 text-gray-500">{formatIDR(dept.target)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-right border-r border-gray-100 dark:border-white/5 ${dAchNom < 0 ? 'text-error-500' : 'text-success-500'}`}>{formatIDR(dAchNom)}</td>
+                              <td className={`px-5 py-2.5 text-xs text-center font-semibold ${dAchPerc >= 100 ? 'text-success-500' : dAchPerc >= 80 ? 'text-amber-500' : 'text-error-500'}`}>{dAchPerc.toFixed(2)}%</td>
+                            </tr>
+                          );
+                        })}
+
+                        {isExpanded && (
+                          <tr className="bg-gray-50 dark:bg-white/[0.02] border-b-2 border-brand-200 dark:border-brand-500/30 font-bold">
+                            <td className="pl-8 pr-5 py-3 text-sm border-r border-gray-100 dark:border-white/5 text-brand-700 dark:text-brand-300">Akumulasi - {sa.sa_name}</td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400">{formatIDR(sa.last_year)}</td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-brand-600 dark:text-brand-400">{formatIDR(sa.actual)}</td>
+                            <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 ${growthNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(growthNom)}</td>
+                            <td className={`px-5 py-3 text-sm text-center border-r border-gray-100 dark:border-white/5 font-bold ${growthPerc < 0 ? 'text-error-600' : 'text-success-600'}`}>{growthPerc.toFixed(2)}%</td>
+                            <td className="px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 text-gray-600 dark:text-gray-400">{formatIDR(sa.target)}</td>
+                            <td className={`px-5 py-3 text-sm text-right border-r border-gray-100 dark:border-white/5 font-bold ${achNom < 0 ? 'text-error-600' : 'text-success-600'}`}>{formatIDR(achNom)}</td>
+                            <td className={`px-5 py-3 text-sm text-center font-bold ${achPerc >= 100 ? 'text-success-600' : achPerc >= 80 ? 'text-amber-500' : 'text-error-600'}`}>{achPerc.toFixed(2)}%</td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+
+                  {/* Grand Total Row for SA table */}
+                  <tr className="bg-brand-600 text-white font-bold">
+                    <td className="px-5 py-3.5 text-sm border-r border-white/20 uppercase tracking-wide">Total Keseluruhan</td>
+                    <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.ly)}</td>
+                    <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual)}</td>
+                    <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual - totals.ly)}</td>
+                    <td className={`px-5 py-3.5 text-sm text-center border-r border-white/20 font-bold ${(totals.actual - totals.ly) < 0 ? 'text-red-200' : 'text-green-200'}`}>{calculatePerc(totals.actual - totals.ly, totals.ly).toFixed(2)}%</td>
+                    <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.target)}</td>
+                    <td className="px-5 py-3.5 text-sm text-right border-r border-white/20">{formatIDR(totals.actual - totals.target)}</td>
+                    <td className={`px-5 py-3.5 text-sm text-center font-black ${calculatePerc(totals.actual, totals.target) >= 100 ? 'text-green-200' : 'text-red-200'}`}>{calculatePerc(totals.actual, totals.target).toFixed(2)}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Custom Styled Table (Based on Image Reference) */}
+        <div className="flex items-center justify-end">
+          {profile?.role === 'store_manager' && (
+            <Button variant="outline" size="sm" onClick={exportPDF} disabled={data.length === 0}>
+              Download Summary
+            </Button>
+          )}
+        </div>
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
           <div className="max-w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
